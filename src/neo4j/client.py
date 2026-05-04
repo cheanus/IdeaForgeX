@@ -14,10 +14,8 @@ class Neo4jClient:
     config: Config
 
     def __post_init__(self) -> None:
-        self.driver = GraphDatabase.driver(
-            self.config.neo4j_uri,
-            auth=(self.config.neo4j_user, self.config.neo4j_password),
-        )
+        auth = None if not self.config.neo4j_user and not self.config.neo4j_password else (self.config.neo4j_user, self.config.neo4j_password)
+        self.driver = GraphDatabase.driver(self.config.neo4j_uri, auth=auth)
 
     def close(self) -> None:
         self.driver.close()

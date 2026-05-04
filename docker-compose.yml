@@ -1,0 +1,40 @@
+services:
+  neo4j-test:
+    image: neo4j:5
+    container_name: ideaforgex-neo4j-test
+    ports:
+      - "7687:7687"
+      - "7474:7474"
+    environment:
+      NEO4J_AUTH: neo4j/test-password
+      NEO4J_server_memory_pagecache_size: 512M
+      NEO4J_server_memory_heap_initial__size: 512M
+      NEO4J_server_memory_heap_max__size: 512M
+    volumes:
+      - neo4j_test_data:/data
+      - neo4j_test_logs:/logs
+      - neo4j_test_import:/var/lib/neo4j/import
+
+  neo4j-personal:
+    image: neo4j:5
+    container_name: ideaforgex-neo4j-personal
+    ports:
+      - "7688:7687"
+      - "7475:7474"
+    environment:
+      NEO4J_AUTH: neo4j/personal-password
+      NEO4J_server_memory_pagecache_size: 512M
+      NEO4J_server_memory_heap_initial__size: 512M
+      NEO4J_server_memory_heap_max__size: 512M
+    volumes:
+      - neo4j_personal_data:/data
+      - neo4j_personal_logs:/logs
+      - neo4j_personal_import:/var/lib/neo4j/import
+
+volumes:
+  neo4j_test_data:
+  neo4j_test_logs:
+  neo4j_test_import:
+  neo4j_personal_data:
+  neo4j_personal_logs:
+  neo4j_personal_import:
