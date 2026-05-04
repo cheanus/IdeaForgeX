@@ -1,0 +1,57 @@
+# IdeaForgeX
+
+LLM 论文创新点生成系统。设计文档见 `doc/`：
+
+| 文件 | 内容 |
+|---|---|
+| `doc/design.md` | 完整设计：节点、边、遍历、训练/推理流程 |
+| `doc/architecture.md` | 技术架构：模块职责、LangGraph 工作流、检索算法伪代码 |
+| `doc/data-model.md` | Neo4j 图模型：约束、索引、可执行 Cypher |
+
+## 全局编码约定
+
+### 命名
+
+| 域 | 约定 |
+|---|---|
+| Neo4j 标签 | 英文 UpperCamelCase（`Inspiration`, `Question`） |
+| Neo4j 关系 | 英文 UPPER_SNAKE（`INSP_COMBINES`, `INSP_REFINES`） |
+| Python 类 | 英文 UpperCamelCase |
+| Python 函数/变量 | 英文 snake_case |
+| 文档/注释 | 中文 |
+| 用户可见 log | 中文 |
+
+### 数据流
+
+LLM 返回 JSON → `models.py` 的 Pydantic 验证 → 写入 Neo4j。验证失败触发 RetryPolicy。
+
+### 错误处理
+
+- LLM JSON 解析失败：重试，超过 `max_retries` 记录失败库。
+- Neo4j 连接失败：抛异常退出，不静默。
+- AMiner API 失败：重试 3 次，仍失败跳过该论文。
+- arXiv 全文获取失败：降级为仅用摘要。
+- 向量索引不存在：`schema.py` 幂等创建。
+
+### 测试
+
+```bash
+uv run pytest -v
+```
+
+### 配置
+
+所有参数来自 `src/config.py` 的 `Config`（`pydantic-settings`，读取一个统一的 yaml 配置文件）。不要在代码中硬编码值。
+
+### 依赖管理
+
+用 `uv`，不用 pip。新增依赖：`uv add <pkg>`，确保 `pyproject.toml` 同步。
+
+## 子模块约定
+
+各核心子目录有独立 `AGENTS.md`：
+
+- `src/agent/AGENTS.md` — LangGraph StateGraph 编写规范
+- `src/neo4j/AGENTS.md` — Neo4j 操作与事务约定
+- `src/llm/AGENTS.md` — LLM 调用与 prompt 管理
+- `src/paper/AGENTS.md` — AMiner + arXiv 论文 API 约定
