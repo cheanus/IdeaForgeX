@@ -1,5 +1,7 @@
 # IdeaForgeX
 
+[English](README.md) | [简体中文](docs/README_zh.md)
+
 IdeaForgeX turns research papers into structured innovation candidates with an LLM-first workflow.
 
 It reads paper text, extracts ideas into a Neo4j graph, and supports both training and inference flows for paper innovation mining.
@@ -44,6 +46,7 @@ Most paper-to-idea systems either stop at summaries or require too much manual c
 
 ```bash
 docker compose up -d
+cp config_example.yaml config.yaml
 uv run python main.py bootstrap
 uv run python main.py train <paper_id>
 uv run python main.py infer <paper_id>
