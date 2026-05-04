@@ -11,9 +11,6 @@ from typing_extensions import TypedDict
 
 from src.config import Config
 from src.llm.client import ChatClient
-from src.llm.prompts import build_llm_b_generate_messages, build_llm_c_eval_messages
-from src.llm.service import call_chat_with_retry, call_with_retry
-from src.models import InnovationIdea
 from src.neo4j.client import Neo4jClient
 from src.neo4j.retrieval import retrieve_with_traversal
 from src.paper.discovery import AMinerClient
@@ -25,8 +22,7 @@ class InferenceState(TypedDict, total=False):
     paper_text: str
     query_text: str
     retrieved_nodes: list[dict]
-    candidate_ideas: list[dict]
-    best_idea: dict | None
+    llm_a: dict | None
     messages: Annotated[list, add_messages]
 
 
@@ -42,32 +38,24 @@ def build_inference_graph(config: Config, client: ChatClient, neo4j_client: Neo4
         nodes = retrieve_with_traversal(neo4j_client, embeddings[0], config)
         return {"retrieved_nodes": nodes}
 
-    def generate(state: InferenceState) -> dict:
-        messages = build_llm_b_generate_messages(state["paper_text"], str(state.get("retrieved_nodes", [])))
-        raw = call_chat_with_retry(client, messages, max_retries=config.max_retries, temperature=config.temperature_llm_b)
-        return {"candidate_ideas": [{"title": raw[:40], "description": raw, "feasibility_score": 0.5, "novelty_score": 0.5, "value_score": 0.5}]}
-
-    def evaluate(state: InferenceState) -> dict:
-        ideas = state.get("candidate_ideas", [])
-        if not ideas:
-            return {"best_idea": None}
-        best = InnovationIdea.model_validate(ideas[0])
-        messages = build_llm_c_eval_messages(state.get("paper_title", ""), state["paper_text"], best)
-        payload = call_with_retry(client, messages, max_retries=config.max_retries, temperature=config.temperature_llm_c)
-        best_idea = payload.best_idea.model_dump() if getattr(payload, "best_idea", None) else best.model_dump()
-        return {"best_idea": best_idea}
+    def apply_llm_a(state: InferenceState) -> dict:
+        return {
+            "llm_a": {
+                "paper_title": state.get("paper_title", ""),
+                "paper_text": state.get("paper_text", ""),
+                "retrieved_nodes": state.get("retrieved_nodes", []),
+            }
+        }
 
     graph = StateGraph(InferenceState)
     graph.add_node("load_target_paper", load_target_paper)
     graph.add_node("retrieve", retrieve)
-    graph.add_node("generate", generate)
-    graph.add_node("evaluate", evaluate)
+    graph.add_node("apply_llm_a", apply_llm_a)
 
     graph.add_edge(START, "load_target_paper")
     graph.add_edge("load_target_paper", "retrieve")
-    graph.add_edge("retrieve", "generate")
-    graph.add_edge("generate", "evaluate")
-    graph.add_edge("evaluate", END)
+    graph.add_edge("retrieve", "apply_llm_a")
+    graph.add_edge("apply_llm_a", END)
 
     memory = MemorySaver()
     return graph.compile(checkpointer=memory)

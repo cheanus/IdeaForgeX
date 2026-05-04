@@ -100,17 +100,3 @@ def reset_practice_graph(client: Neo4jClient) -> None:
         session.run("MATCH (n:Inspiration) DETACH DELETE n")
         session.run("MATCH (n:Question) DETACH DELETE n")
 
-
-def write_failure_record(tx, record: dict[str, Any]) -> None:
-    tx.run(
-        """
-        CREATE (:FailureRecord {
-            paper_id: $paper_id,
-            paper_title: $paper_title,
-            failure_reason: $failure_reason,
-            llm_c_eval: $llm_c_eval,
-            candidate_idea_snapshot: $candidate_idea_snapshot
-        })
-        """,
-        **record,
-    )

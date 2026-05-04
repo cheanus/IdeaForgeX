@@ -207,14 +207,4 @@ MATCH (n:Question) DETACH DELETE n
 
 ## 9. 失败库记录
 
-失败库只保留训练失败样本的最小快照，不进入向量检索：
-
-```text
-{
-    paper_id: string,
-    paper_title: string,
-    failure_reason: string,
-    llm_c_eval: object,
-    candidate_idea_snapshot: object
-}
-```
+当前 A-only 版本不写失败库；本节仅保留历史说明，后续若重新引入反馈环再恢复最小快照定义。

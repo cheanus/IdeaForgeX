@@ -56,7 +56,7 @@ V1 原型阶段。LLM / Embedding 均通过 OpenAI 兼容 API 统一接入。Neo
 | `config.py` | 环境变量 → `Config` Pydantic 对象 |
 | `models.py` | `InspirationNode`, `QuestionNode`, `Edge`, `InnovationIdea` 等 |
 | `llm/client.py` | OpenAI 兼容客户端封装（chat + embedding） |
-| `llm/prompts.py` | LLM A / B / C 的 system prompt 模板 |
+| `llm/prompts.py` | LLM A 的 system prompt 模板 |
 | `neo4j/client.py` | `neo4j.Driver` 连接管理，基础 CRUD |
 | `neo4j/schema.py` | 约束、向量索引创建（幂等），节点/边写入 |
 | `neo4j/retrieval.py` | 向量搜索 + 5 阶段遍历 + 去重截断 |
@@ -75,8 +75,6 @@ flowchart TD
     subgraph C["LangGraph Agent"]
         direction LR
         LLM_A["LLM A"]
-        LLM_B["LLM B"]
-        LLM_C["LLM C"]
     end
     C --> D["OpenAI 兼容 API"]
     D --> E
@@ -99,18 +97,13 @@ flowchart TD
     P1 --> A1{"LLM_A_判断"}
     A1 -->|能| PAPER["论文库记录"]
     A1 -->|否| A2["LLM_A 在内存中生成节点 + 边"]
-    A2 --> B["LLM_B_生成创新点"]
-    B --> C{"LLM_C_评估"}
-    C -->|优| PAPER
-    C -->|劣| RETRY{"反思修改 (≤ N_max)?"}
-    RETRY -->|是| B
-    RETRY -->|否| FAIL["失败库记录 + 回滚"]
+    A2 --> PAPER
 ```
 
 LangGraph 特性：
 
 - **Checkpointer**：每步后自动 checkpoint，支持中断恢复
-- **条件边**：LLM_A/C 的判断结果路由到不同下游节点
+- **条件边**：LLM_A 的判断结果路由到不同下游节点
 - **RetryPolicy**：LLM 调用失败自动重试
 
 ### 6.2 推理 StateGraph
@@ -122,9 +115,8 @@ flowchart TD
     P1 --> P2["相关文献 (arXiv search)"]
     P2 --> E["Embedding (查询向量)"]
     E --> R["Neo4j 检索遍历"]
-    R --> G["LLM 生成创新点"]
-    G --> F["过滤评估 (AMiner 查重)"]
-    F --> O["END → 创新点列表"]
+    R --> G["LLM A 生成结构化创新节点与边"]
+    G --> O["END → 创新点列表"]
 ```
 
 ## 7. 检索遍历算法
@@ -203,13 +195,13 @@ class ChatClient:
         """调用 embeddings，返回向量列表"""
 ```
 
-三个角色共用一个模型实例，通过 `prompts.py` 中的不同模板构建 messages。
+仅保留 LLM A，通过 `prompts.py` 的单一模板构建 messages。
 
 ## 9. 错误处理策略
 
 | 场景 | 策略 |
 |---|---|---|
-| LLM JSON 解析失败 | RetryPolicy 自动重试，超过 `max_retries` 记录到失败库 |
+| LLM JSON 解析失败 | RetryPolicy 自动重试，超过 `max_retries` 直接失败 |
 | Neo4j 连接失败 | 抛异常退出，不静默 |
 | 向量索引不存在 | `schema.py` 首次运行时幂等创建 |
 | AMiner API 失败 | 重试 3 次，仍失败则跳过该论文 |

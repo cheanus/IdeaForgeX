@@ -29,9 +29,6 @@ class Config(BaseSettings):
     embedding_model_name: str = Field(default="text-embedding-3-small")
     embedding_dim: int = Field(default=1536)
     temperature_llm_a_judge: float = Field(default=0.1)
-    temperature_llm_a_generate: float = Field(default=0.5)
-    temperature_llm_b: float = Field(default=0.7)
-    temperature_llm_c: float = Field(default=0.3)
     max_retries: int = Field(default=3)
     aminer_api_key: str = Field(default="")
     aminer_base_url: str = Field(default="https://datacenter.aminer.cn/gateway/open_platform")
@@ -46,7 +43,6 @@ class Config(BaseSettings):
     score_decay: float = Field(default=0.7)
     final_k: int = Field(default=20)
     arxiv_short_abstract_threshold: int = Field(default=200)
-    max_reflection_rounds: int = Field(default=3)
 
 
 def load_config(config_file: str | Path | None = None) -> Config:

@@ -12,12 +12,9 @@ class TrainingState(TypedDict):
     paper_text: str
     paper_id: str
     can_infer: bool
-    generated_nodes: list  # InspirationNode + QuestionNode
-    generated_edges: list  # Edge
-    candidate_ideas: list
-    best_idea: dict | None
-    evaluation: dict | None
-    retry_count: int
+    inspirations: list  # InspirationNode
+    questions: list  # QuestionNode
+    edges: list  # Edge
     messages: Annotated[list, add_messages]
 ```
 
@@ -33,15 +30,11 @@ def node_extract(state: TrainingState) -> dict:
     text = extract_pdf(state["paper_id"])
     return {"paper_text": text}
 
-# 条件边：返回字符串路由到下游节点
-def route_after_a(state: TrainingState) -> str:
-    return "record_paper" if state["can_infer"] else "generate_nodes"
-
 builder.add_node("extract", node_extract)
 builder.add_node("llm_a_judge", node_llm_a)
 builder.add_conditional_edges("llm_a_judge", route_after_a, {
     "record_paper": "record_paper",
-    "generate_nodes": "llm_a_generate"
+    "commit_candidates": "commit_candidates"
 })
 ```
 
@@ -55,12 +48,9 @@ builder.add_conditional_edges("llm_a_judge", route_after_a, {
 ## RetryPolicy
 
 ```python
-from langgraph.pregel import RetryPolicy
+from langgraph.types import RetryPolicy
 
-builder.add_node(
-    "llm_a_judge", node_llm_a,
-    retry=RetryPolicy(max_attempts=3, initial_interval=2.0, backoff_factor=2)
-)
+builder.add_node("llm_a_judge", node_llm_a, retry_policy=RetryPolicy(max_attempts=3))
 ```
 
 仅 LLM 调用节点需要 RetryPolicy。确定性节点（如 `extract`、`neo4j_write`）不需要。
