@@ -26,7 +26,11 @@ class FakeSession:
 
     def execute_write(self, fn, *args):
         self.log.append((fn.__name__, args, {}))
-        tx = SimpleNamespace(run=lambda *run_args, **run_kwargs: self.log.append(("run", run_args, run_kwargs)))
+        tx = SimpleNamespace(
+            run=lambda *run_args, **run_kwargs: self.log.append(
+                ("run", run_args, run_kwargs)
+            )
+        )
         return fn(tx, *args)
 
     def run(self, query, **kwargs):
@@ -53,7 +57,11 @@ class FakeAMinerClient:
         self.config = config
 
     def get_paper_detail(self, paper_id: str):
-        return {"id": paper_id, "title": ATTENTION_TITLE, "abstract_slice": "short abstract"}
+        return {
+            "id": paper_id,
+            "title": ATTENTION_TITLE,
+            "abstract_slice": "short abstract",
+        }
 
 
 class FakeArxivExtractor:
@@ -78,15 +86,21 @@ def test_training_graph_routes_can_infer_to_record_paper(monkeypatch):
     monkeypatch.setattr("src.agent.training.AMinerClient", FakeAMinerClient)
     monkeypatch.setattr("src.agent.training.ArxivExtractor", FakeArxivExtractor)
 
-    def fake_call_with_retry(client, messages, max_retries=3, temperature=0.1, parser=None):
+    def fake_call_with_retry(
+        client, messages, max_retries=3, temperature=0.1, parser=None
+    ):
         assert parser is not None
         return LLMACandidate(
             can_infer=True,
         )
+
     monkeypatch.setattr("src.agent.training.call_with_retry", fake_call_with_retry)
 
     graph = build_training_graph(config, SimpleNamespace(), neo4j_client)
-    result = graph.invoke({"paper_id": "paper-1706.03762", "retry_count": 0}, {"configurable": {"thread_id": "paper-1706.03762"}})
+    result = graph.invoke(
+        {"paper_id": "paper-1706.03762", "retry_count": 0},
+        {"configurable": {"thread_id": "paper-1706.03762"}},
+    )
 
     assert result["paper_title"] == ATTENTION_TITLE
     assert result["paper_text"] == ATTENTION_ABSTRACT

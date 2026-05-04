@@ -10,7 +10,9 @@ class DummyCompletions:
 
     def create(self, **kwargs):
         self.calls.append(kwargs)
-        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="ok"))])
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="ok"))]
+        )
 
 
 class DummyEmbeddings:

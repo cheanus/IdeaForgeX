@@ -24,7 +24,9 @@ def _vector_query_cypher(index_name: str, k: int) -> str:
     """
 
 
-def vector_search(client: Neo4jClient, index_name: str, query_embedding: list[float], k: int) -> list[RetrievalHit]:
+def vector_search(
+    client: Neo4jClient, index_name: str, query_embedding: list[float], k: int
+) -> list[RetrievalHit]:
     with client.driver.session(database=client.config.neo4j_database) as session:
         result = session.run(
             _vector_query_cypher(index_name, k),
@@ -32,7 +34,10 @@ def vector_search(client: Neo4jClient, index_name: str, query_embedding: list[fl
             k=k,
             embedding=query_embedding,
         )
-        return [RetrievalHit(node=record["node"].data(), score=float(record["score"])) for record in result]
+        return [
+            RetrievalHit(node=record["node"].data(), score=float(record["score"]))
+            for record in result
+        ]
 
 
 def expand_refinement_chain(client: Neo4jClient, hit_id: str) -> list[dict[str, Any]]:
@@ -50,7 +55,9 @@ def expand_refinement_chain(client: Neo4jClient, hit_id: str) -> list[dict[str, 
         return [record["finer"].data() for record in result]
 
 
-def hop_expand(client: Neo4jClient, node_id: str, max_neighbors: int) -> list[dict[str, Any]]:
+def hop_expand(
+    client: Neo4jClient, node_id: str, max_neighbors: int
+) -> list[dict[str, Any]]:
     query = """
     MATCH (n {id: $node_id})-[r:INSP_COMBINES|INSP_QUESTION|QUESTION_COMBINES]-(m)
     RETURN m, r.weight AS weight
@@ -59,10 +66,15 @@ def hop_expand(client: Neo4jClient, node_id: str, max_neighbors: int) -> list[di
     """
     with client.driver.session(database=client.config.neo4j_database) as session:
         result = session.run(query, node_id=node_id, max_neighbors=max_neighbors)
-        return [{"node": record["m"].data(), "weight": float(record["weight"])} for record in result]
+        return [
+            {"node": record["m"].data(), "weight": float(record["weight"])}
+            for record in result
+        ]
 
 
-def retrieve_with_traversal(client: Neo4jClient, query_embedding: list[float], config: Config) -> list[dict[str, Any]]:
+def retrieve_with_traversal(
+    client: Neo4jClient, query_embedding: list[float], config: Config
+) -> list[dict[str, Any]]:
     hits: list[dict[str, Any]] = []
     vectors = vector_search(client, "idx_insp_vector", query_embedding, config.k_hits)
     vectors += vector_search(client, "idx_q_vector", query_embedding, config.k_hits)

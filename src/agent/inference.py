@@ -26,12 +26,22 @@ class InferenceState(TypedDict, total=False):
     messages: Annotated[list, add_messages]
 
 
-def build_inference_graph(config: Config, client: ChatClient, neo4j_client: Neo4jClient):
+def build_inference_graph(
+    config: Config, client: ChatClient, neo4j_client: Neo4jClient
+):
     def load_target_paper(state: InferenceState) -> dict:
         discovery = AMinerClient(config)
         paper = discovery.get_paper_detail(state["paper_id"])
-        text = paper.get("abstract_slice") or paper.get("abstract") or paper.get("title", "")
-        return {"paper_title": paper.get("title", ""), "paper_text": text, "query_text": text}
+        text = (
+            paper.get("abstract_slice")
+            or paper.get("abstract")
+            or paper.get("title", "")
+        )
+        return {
+            "paper_title": paper.get("title", ""),
+            "paper_text": text,
+            "query_text": text,
+        }
 
     def retrieve(state: InferenceState) -> dict:
         embeddings = client.embed([state["query_text"]])

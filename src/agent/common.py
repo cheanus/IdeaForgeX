@@ -11,7 +11,11 @@ def parse_llm_a_candidate(payload: dict[str, Any]) -> LLMACandidate:
     return LLMACandidate.model_validate(payload)
 
 
-def dump_nodes(inspirations: list[InspirationNode], questions: list[QuestionNode], edges: list[Edge]) -> dict[str, Any]:
+def dump_nodes(
+    inspirations: list[InspirationNode],
+    questions: list[QuestionNode],
+    edges: list[Edge],
+) -> dict[str, Any]:
     return {
         "inspirations": [node.model_dump() for node in inspirations],
         "questions": [node.model_dump() for node in questions],

@@ -15,7 +15,9 @@ PARADIGMS = [
 ]
 
 
-def build_llm_a_judge_messages(paper_text: str, practice_summary: str) -> list[dict[str, str]]:
+def build_llm_a_judge_messages(
+    paper_text: str, practice_summary: str
+) -> list[dict[str, str]]:
     system = (
         "你是论文创新点分析器。请判断论文是否已经足以直接记录到论文库；"
         "只输出一个 JSON，其中包含 can_infer、inspiration_nodes、question_nodes 和 edges。"

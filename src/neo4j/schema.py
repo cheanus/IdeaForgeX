@@ -10,8 +10,12 @@ from src.neo4j.client import Neo4jClient
 
 def ensure_schema(client: Neo4jClient) -> None:
     with client.driver.session(database=client.config.neo4j_database) as session:
-        session.run("CREATE CONSTRAINT insp_id_unique IF NOT EXISTS FOR (n:Inspiration) REQUIRE n.id IS UNIQUE")
-        session.run("CREATE CONSTRAINT q_id_unique IF NOT EXISTS FOR (n:Question) REQUIRE n.id IS UNIQUE")
+        session.run(
+            "CREATE CONSTRAINT insp_id_unique IF NOT EXISTS FOR (n:Inspiration) REQUIRE n.id IS UNIQUE"
+        )
+        session.run(
+            "CREATE CONSTRAINT q_id_unique IF NOT EXISTS FOR (n:Question) REQUIRE n.id IS UNIQUE"
+        )
         session.run(
             """
             CREATE VECTOR INDEX idx_insp_vector IF NOT EXISTS
@@ -74,7 +78,11 @@ def create_question(tx, node: QuestionNode) -> None:
 
 
 def create_edge(tx, edge: Edge) -> None:
-    rel_type = edge.rel_type.value if isinstance(edge.rel_type, RelationType) else str(edge.rel_type)
+    rel_type = (
+        edge.rel_type.value
+        if isinstance(edge.rel_type, RelationType)
+        else str(edge.rel_type)
+    )
     tx.run(
         f"""
         MATCH (a {{id: $from_id}}), (b {{id: $to_id}})
@@ -86,7 +94,12 @@ def create_edge(tx, edge: Edge) -> None:
     )
 
 
-def batch_write(tx, inspirations: list[InspirationNode], questions: list[QuestionNode], edges: list[Edge]) -> None:
+def batch_write(
+    tx,
+    inspirations: list[InspirationNode],
+    questions: list[QuestionNode],
+    edges: list[Edge],
+) -> None:
     for node in inspirations:
         create_inspiration(tx, node)
     for node in questions:
@@ -99,4 +112,3 @@ def reset_practice_graph(client: Neo4jClient) -> None:
     with client.driver.session(database=client.config.neo4j_database) as session:
         session.run("MATCH (n:Inspiration) DETACH DELETE n")
         session.run("MATCH (n:Question) DETACH DELETE n")
-

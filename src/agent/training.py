@@ -42,7 +42,11 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
         paper_id = state["paper_id"]
         discovery = AMinerClient(config)
         paper = discovery.get_paper_detail(paper_id)
-        text = paper.get("abstract_slice") or paper.get("abstract") or paper.get("title", "")
+        text = (
+            paper.get("abstract_slice")
+            or paper.get("abstract")
+            or paper.get("title", "")
+        )
         if len(text) < config.arxiv_short_abstract_threshold:
             arxiv_text = ""
             extractor = ArxivExtractor(config)
@@ -51,7 +55,10 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
                 arxiv_text = extractor.fetch_full_text(arxiv_id)
             if arxiv_text:
                 text = arxiv_text
-        return {"paper_title": paper.get("title", state.get("paper_title", "")), "paper_text": text}
+        return {
+            "paper_title": paper.get("title", state.get("paper_title", "")),
+            "paper_text": text,
+        }
 
     def llm_a_judge(state: TrainingState) -> dict:
         messages = build_llm_a_judge_messages(state["paper_text"], "实践库概要待接入")
@@ -75,12 +82,21 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
 
     def record_paper(state: TrainingState) -> dict:
         with neo4j_client.driver.session(database=config.neo4j_database) as session:
-            session.run("CREATE (:PaperRecord {id: $id, title: $title})", id=state["paper_id"], title=state.get("paper_title", ""))
+            session.run(
+                "CREATE (:PaperRecord {id: $id, title: $title})",
+                id=state["paper_id"],
+                title=state.get("paper_title", ""),
+            )
         return {}
 
     def commit_candidates(state: TrainingState) -> dict:
-        inspirations = [InspirationNode.model_validate(item) for item in state.get("inspirations", [])]
-        questions = [QuestionNode.model_validate(item) for item in state.get("questions", [])]
+        inspirations = [
+            InspirationNode.model_validate(item)
+            for item in state.get("inspirations", [])
+        ]
+        questions = [
+            QuestionNode.model_validate(item) for item in state.get("questions", [])
+        ]
         edges = [Edge.model_validate(item) for item in state.get("edges", [])]
         with neo4j_client.driver.session(database=config.neo4j_database) as session:
             session.execute_write(batch_write, inspirations, questions, edges)
@@ -88,7 +104,11 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
 
     graph = StateGraph(TrainingState)
     graph.add_node("load_paper", load_paper)
-    graph.add_node("llm_a_judge", llm_a_judge, retry_policy=RetryPolicy(max_attempts=config.max_retries))
+    graph.add_node(
+        "llm_a_judge",
+        llm_a_judge,
+        retry_policy=RetryPolicy(max_attempts=config.max_retries),
+    )
     graph.add_node("record_paper", record_paper)
     graph.add_node("commit_candidates", commit_candidates)
 

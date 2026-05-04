@@ -31,7 +31,9 @@ class Config(BaseSettings):
     temperature_llm_a_judge: float = Field(default=0.1)
     max_retries: int = Field(default=3)
     aminer_api_key: str = Field(default="")
-    aminer_base_url: str = Field(default="https://datacenter.aminer.cn/gateway/open_platform")
+    aminer_base_url: str = Field(
+        default="https://datacenter.aminer.cn/gateway/open_platform"
+    )
     arxiv_api_url: str = Field(default="https://export.arxiv.org/api/query")
     neo4j_uri: str = Field(default="bolt://localhost:7687")
     neo4j_user: str = Field(default="neo4j")
