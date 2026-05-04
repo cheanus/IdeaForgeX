@@ -12,6 +12,7 @@ IdeaForgeX 是一个 Agent 框架，在数据驱动下训练，使用时生成�
 - **评审角色分离**：LLM A/B/C 用同一模型但不同 system prompt，分析/生成与评估分离以减少自我强化偏差。
 - **边附权重**：每条无向边附带 `weight: float`（LLM A 给定 0~1 分），用于检索排序。
 - **论文来源**：AMiner API 发现全网论文 + 获取摘要（付费，成本极低）；arXiv API 仅作全文备选（免费）。
+- **配置原则**：Embedding 维度、检索 top-k、hop 上限、分数衰减等变量全部来自 `Config`，不在代码中硬编码。
 
 ## 3. 四大库
 
@@ -107,14 +108,14 @@ LLM 无法模仿其创新点的论文 + LLM C 评估摘要。人工定期审查�
 ## 4. 检索遍历
 
 ```
-向量搜索(top-10) → 精化链展开(双向不限深) → 1-hop(top-3, 按weight) → 2-hop(top-3, 按weight) → 去重截断(top-20)
+向量搜索(top-10, Inspiration + Question 一视同仁) → 精化链展开(双向不限深) → 1-hop(top-3, 按weight) → 2-hop(top-3, 按weight) → 去重截断(top-20)
 ```
 
 ```mermaid
 flowchart TD
     Q["用户查询"]
     Q --> VS["向量检索: 同时查 Inspiration(全粒度) + Question<br/>混排 top-10"]
-    VS --> P2["精化链展开: 命中 Inspiration → 沿 INSP_REFINES 双向走到底<br/>(不计 hop，无深度限制)"]
+    VS --> P2["精化链展开: 命中 Inspiration 或 Question → 若命中 Inspiration 则沿 INSP_REFINES 双向走到底<br/>(不计 hop，无深度限制)"]
     P2 --> P3["1-hop 扩展 (每节点限 top-3, 按边权重排序):<br/>Inspiration → INSP_COMBINES + INSP_QUESTION<br/>Question → INSP_QUESTION + QUESTION_COMBINES<br/>扩展节点分数 = 源分数 × 0.7"]
     P3 --> P4["2-hop 扩展: 对 P3 新入节点再 1-hop<br/>(同限 top-3, 扩展节点分数 = 源分数 × 0.7)"]
     P4 --> P5["去重 + 截断<br/>同节点取最高分, 降序取 top-20"]
@@ -140,13 +141,14 @@ flowchart TD
     P1 --> A1{"LLM A: 基于论文摘要 + 范式库 + 实践库<br/>能否推演出该论文创新点？"}
     A1 -->|能| PAPER["记录至论文库"]
     PAPER --> D
-    A1 -->|否| A2["LLM A 生成并写入 Neo4j:<br/>• N 个 Inspiration 节点 + 精化边<br/>• M 个 Question 节点<br/>• 灵感组合/灵感问题/问题组合边(含 weight)"]
+    A1 -->|否| A2["LLM A 在内存中生成候选结构:<br/>• N 个 Inspiration 节点 + 精化边<br/>• M 个 Question 节点<br/>• 灵感组合/灵感问题/问题组合边(含 weight)"]
     A2 --> B["LLM B: 基于论文摘要 + 范式库 + 实践库<br/>生成候选创新点"]
     B --> C{"LLM C: 多维评估(可行性/新颖性/价值)<br/>最佳是否优于原论文？"}
-    C -->|是| PAPER
+    C -->|是| COMMIT["将本论文实践库候选一次性写入 Neo4j 事务"]
+    COMMIT --> PAPER
     C -->|否| RETRY{"反思修改<br/>次数 < N_max?"}
     RETRY -->|是| B
-    RETRY -->|否| FAIL["记录至失败库<br/>回滚本论文实践库更新"]
+    RETRY -->|否| FAIL["记录至失败库<br/>回滚本论文实践库候选"]
     FAIL --> D
 ```
 
@@ -175,6 +177,20 @@ flowchart TD
 
 V1 三角色用同一模型，不同 system prompt 区分。
 
-## 8. 冷启动
+## 8. 失败库
+
+失败库最小记录集：
+
+| 字段 | 说明 |
+|---|---|
+| paper_id | 论文 ID |
+| paper_title | 论文标题 |
+| failure_reason | 失败原因 |
+| llm_c_eval | LLM C 的评估结果快照 |
+| candidate_idea_snapshot | 候选创新点快照 |
+
+失败库仅保存训练中 C 未通过的样本，用于后续人工审查，不参与检索。
+
+## 9. 冷启动
 
 训练前 LLM 手动生成种子 Inspiration 和 Question 节点填充实践库。非精化边也需在冷启动时手动建立。

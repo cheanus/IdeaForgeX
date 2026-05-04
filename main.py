@@ -1,5 +1,4 @@
-def main():
-    print("Hello from ideaforgex!")
+from src.main import main
 
 
 if __name__ == "__main__":

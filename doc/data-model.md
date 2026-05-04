@@ -19,15 +19,15 @@ FOR (n:Question) REQUIRE n.id IS UNIQUE;
 ```cypher
 CREATE VECTOR INDEX idx_insp_vector IF NOT EXISTS
 FOR (n:Inspiration) ON (n.向量)
-OPTIONS {indexConfig: {
-    `vector.dimensions`: 1536,
+    OPTIONS {indexConfig: {
+    `vector.dimensions`: $embedding_dim,
     `vector.similarity_function`: 'cosine'
 }};
 
 CREATE VECTOR INDEX idx_q_vector IF NOT EXISTS
 FOR (n:Question) ON (n.向量)
-OPTIONS {indexConfig: {
-    `vector.dimensions`: 1536,
+    OPTIONS {indexConfig: {
+    `vector.dimensions`: $embedding_dim,
     `vector.similarity_function`: 'cosine'
 }};
 ```
@@ -41,7 +41,7 @@ OPTIONS {indexConfig: {
     id: string,              -- "insp-{uuid}"
     粒度: int,               -- 0, 1, 2, ... 越小越抽象
     核心描述: string,
-    向量: list[float],       -- 1536 维
+    向量: list[float],       -- 维度由 embedding 配置决定
     前提条件: string,
     操作步骤: string,
     已知实例: string         -- 可缺省
@@ -54,7 +54,7 @@ OPTIONS {indexConfig: {
 (:Question {
     id: string,              -- "q-{uuid}"
     核心描述: string,
-    向量: list[float],       -- 1536 维
+    向量: list[float],       -- 维度由 embedding 配置决定
     问题类型: string,        -- "理论缺口" | "工程瓶颈" | "评估缺失" | "跨领域空白"
     当前现状: string,
     未解决部分: string
@@ -203,4 +203,18 @@ LIMIT 3
 // 删除所有实践库节点和边（保留约束和索引）
 MATCH (n:Inspiration) DETACH DELETE n
 MATCH (n:Question) DETACH DELETE n
+```
+
+## 9. 失败库记录
+
+失败库只保留训练失败样本的最小快照，不进入向量检索：
+
+```text
+{
+    paper_id: string,
+    paper_title: string,
+    failure_reason: string,
+    llm_c_eval: object,
+    candidate_idea_snapshot: object
+}
 ```

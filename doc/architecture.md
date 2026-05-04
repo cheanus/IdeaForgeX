@@ -10,7 +10,7 @@ V1 原型阶段。LLM / Embedding 均通过 OpenAI 兼容 API 统一接入。Neo
 |---|---|---|---|
 | Agent 框架 | LangGraph | >=0.3.0 |
 | LLM SDK | langchain-openai | >=0.3.0 |
-| 图数据库 | Neo4j Community | >=5.0 (HNSW) |
+| 图数据库 | Neo4j Community | 最新稳定版 |
 | 论文发现 + 摘要 | AMiner API（付费，低成本） | 需 `AMINER_API_KEY` |
 | 论文全文（备选） | arXiv web_extract（免费） | 仅 arXiv 收录的论文 |
 | 论文解析（备选） | pymupdf | >=1.24 |
@@ -98,9 +98,8 @@ flowchart TD
     D --> P1["获取摘要 (AMiner paper_info batch)"]
     P1 --> A1{"LLM_A_判断"}
     A1 -->|能| PAPER["论文库记录"]
-    A1 -->|否| A2["LLM_A_生成节点 + 边"]
-    A2 --> NEO["Neo4j 写入"]
-    NEO --> B["LLM_B_生成创新点"]
+    A1 -->|否| A2["LLM_A 在内存中生成节点 + 边"]
+    A2 --> B["LLM_B_生成创新点"]
     B --> C{"LLM_C_评估"}
     C -->|优| PAPER
     C -->|劣| RETRY{"反思修改 (≤ N_max)?"}
@@ -188,6 +187,8 @@ final = sorted(candidates.values(), key=lambda t: t[1], reverse=True)[:config.fi
 | max_depth | 2 | `config.max_depth` |
 | score_decay | 0.7 | `config.score_decay` |
 | final_k | 20 | `config.final_k` |
+
+检索实现规则：`Inspiration` 与 `Question` 同时作为向量检索入口，命中后统一进入 hop 扩展；若命中 `Inspiration`，再额外展开 `INSP_REFINES` 双向链。
 
 ## 8. LLM 调用模式
 
