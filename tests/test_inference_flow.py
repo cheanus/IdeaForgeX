@@ -29,7 +29,7 @@ def test_inference_graph_returns_llm_a_state(monkeypatch):
     neo4j_client = SimpleNamespace(config=config, driver=SimpleNamespace())
     retrieved_nodes = [{"node": {"id": "insp-1", "type": "Inspiration"}, "score": 0.99}]
 
-    monkeypatch.setattr("src.agent.inference.AMinerClient", FakePaperClient)
+    monkeypatch.setattr("src.paper.resolver.AMinerClient", FakePaperClient)
     monkeypatch.setattr(
         "src.agent.inference.retrieve_with_traversal",
         lambda client, embedding, cfg: retrieved_nodes,

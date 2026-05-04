@@ -20,7 +20,10 @@ def build_llm_a_judge_messages(
 ) -> list[dict[str, str]]:
     system = (
         "你是论文创新点分析器。请判断论文是否已经足以直接记录到论文库；"
+        "如果无法生成有效 JSON，返回 {\"error\": \"原因\"}。"
         "只输出一个 JSON，其中包含 can_infer、inspiration_nodes、question_nodes 和 edges。"
+        "inspiration_nodes 与 question_nodes 必须是数组，每个元素必须包含 id、核心描述、向量。"
+        "edges 必须是数组，每个元素必须包含 from_id、to_id、rel_type、weight。"
     )
     user = f"论文内容：\n{paper_text}\n\n范式库：\n{chr(10).join(PARADIGMS)}\n\n实践库概要：\n{practice_summary}\n"
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]

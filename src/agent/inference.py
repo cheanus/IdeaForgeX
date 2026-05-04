@@ -13,7 +13,7 @@ from src.config import Config
 from src.llm.client import ChatClient
 from src.neo4j.client import Neo4jClient
 from src.neo4j.retrieval import retrieve_with_traversal
-from src.paper.discovery import AMinerClient
+from src.paper.resolver import load_paper_record
 
 
 class InferenceState(TypedDict, total=False):
@@ -30,15 +30,10 @@ def build_inference_graph(
     config: Config, client: ChatClient, neo4j_client: Neo4jClient
 ):
     def load_target_paper(state: InferenceState) -> dict:
-        discovery = AMinerClient(config)
-        paper = discovery.get_paper_detail(state["paper_id"])
-        text = (
-            paper.get("abstract_slice")
-            or paper.get("abstract")
-            or paper.get("title", "")
-        )
+        record = load_paper_record(config, state["paper_id"])
+        text = record.get("text", "")
         return {
-            "paper_title": paper.get("title", ""),
+            "paper_title": record.get("title", ""),
             "paper_text": text,
             "query_text": text,
         }

@@ -18,8 +18,7 @@ from src.llm.service import call_with_retry
 from src.models import Edge, InspirationNode, QuestionNode
 from src.neo4j.client import Neo4jClient
 from src.neo4j.schema import batch_write
-from src.paper.discovery import AMinerClient
-from src.paper.extractor import ArxivExtractor
+from src.paper.resolver import build_practice_summary, load_paper_record
 
 
 class TrainingState(TypedDict, total=False):
@@ -40,28 +39,12 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
         if paper_text:
             return {}
         paper_id = state["paper_id"]
-        discovery = AMinerClient(config)
-        paper = discovery.get_paper_detail(paper_id)
-        text = (
-            paper.get("abstract_slice")
-            or paper.get("abstract")
-            or paper.get("title", "")
-        )
-        if len(text) < config.arxiv_short_abstract_threshold:
-            arxiv_text = ""
-            extractor = ArxivExtractor(config)
-            arxiv_id = extractor.find_arxiv_id(paper)
-            if arxiv_id:
-                arxiv_text = extractor.fetch_full_text(arxiv_id)
-            if arxiv_text:
-                text = arxiv_text
-        return {
-            "paper_title": paper.get("title", state.get("paper_title", "")),
-            "paper_text": text,
-        }
+        record = load_paper_record(config, paper_id)
+        return {"paper_title": record["title"], "paper_text": record["text"]}
 
     def llm_a_judge(state: TrainingState) -> dict:
-        messages = build_llm_a_judge_messages(state["paper_text"], "实践库概要待接入")
+        practice_summary = build_practice_summary(neo4j_client)
+        messages = build_llm_a_judge_messages(state["paper_text"], practice_summary)
         payload = call_with_retry(
             client,
             messages,
