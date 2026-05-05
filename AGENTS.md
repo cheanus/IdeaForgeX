@@ -36,6 +36,8 @@ LLM 返回 JSON → `models.py` 的 Pydantic 验证 → 写入 Neo4j。验证失
 ### 测试
 
 ```bash
+uv format
+pyright
 uv run pytest -v
 ```
 
@@ -47,7 +49,12 @@ uv run pytest -v
 
 用 `uv`，不用 pip。新增依赖：`uv add <pkg>`，确保 `pyproject.toml` 同步。
 
-## 子模块约定
+## 编码规范
+
+- 良好的函数/类以及模块划分，单一职责原则。
+- 完善又精炼的 docstring 和注释，尤其是复杂逻辑。
+
+## 文档维护
 
 各核心子目录有独立 `AGENTS.md`：
 
@@ -55,3 +62,9 @@ uv run pytest -v
 - `src/neo4j/AGENTS.md` — Neo4j 操作与事务约定
 - `src/llm/AGENTS.md` — LLM 调用与 prompt 管理
 - `src/paper/AGENTS.md` — AMiner + arXiv 论文 API 约定
+
+`docs/` 只包含设计与架构文档，不包含实现细节。实现细节在各子模块的 `AGENTS.md` 中定义。
+
+全局编码规范在本文件中定义，子模块 `AGENTS.md` 可以根据需要补充特定约定，但必须遵守全局规范。
+
+每次提交前检查相关 `AGENTS.md` 和 `docs/` 是否需要更新，确保文档与代码同步。

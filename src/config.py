@@ -36,7 +36,7 @@ class Config(BaseSettings):
         default="https://datacenter.aminer.cn/gateway/open_platform"
     )
     arxiv_api_url: str = Field(default="https://export.arxiv.org/api/query")
-    neo4j_uri: str = Field(default="bolt://localhost:7687")
+    neo4j_uri: str = Field(default="bolt://localhost:7688")
     neo4j_user: str = Field(default="neo4j")
     neo4j_password: str = Field(default="")
     neo4j_database: str = Field(default="neo4j")

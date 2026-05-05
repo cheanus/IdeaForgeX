@@ -44,10 +44,16 @@ Most paper-to-idea systems either stop at summaries or require too much manual c
 
 ## Quick Start
 
+
+First time setup:
 ```bash
 docker compose up -d
 cp config_example.yaml config.yaml
 uv run python main.py bootstrap
+```
+
+Usage:
+```
 uv run python main.py train <paper_id>
 uv run python main.py infer <paper_id>
 ```
@@ -101,6 +107,10 @@ Key fields include:
 - Training and inference are implemented as LangGraph state machines.
 - LLM output is validated through Pydantic models before any Neo4j writes.
 - If validation fails, the workflow retries according to the configured policy.
+
+## TODO
+
+-[ ] **Embedding Model Change Processing:** After changing embedding model, the 'IF NOT EXISTS' of' secure_schema 'will not reconstruct the existing vector index, resulting in a mismatch between the old dimension index and the new vector. Need to add detection logic, actively 'DROP' and rebuild indexes when incompatible.
 
 ## License
 

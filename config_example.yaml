@@ -6,6 +6,6 @@ embedding_api_key: ""
 embedding_model_name: "text-embedding-3-small"
 embedding_dim: 1536
 aminer_api_key: ""
-neo4j_uri: "bolt://localhost:7687"
+neo4j_uri: "bolt://localhost:7688"
 neo4j_user: "neo4j"
 neo4j_password: ""

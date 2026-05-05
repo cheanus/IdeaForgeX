@@ -42,10 +42,15 @@ IdeaForgeX 将研究论文转换为结构化的创新候选项，采用以 LLM �
 
 ## 快速开始
 
+第一次运行：
 ```bash
 docker compose up -d
 cp config_example.yaml config.yaml
 uv run python main.py bootstrap
+```
+
+使用：
+```bash
 uv run python main.py train <paper_id>
 uv run python main.py infer <paper_id>
 ```
@@ -99,6 +104,10 @@ uv run pytest -q
 - 训练与推理以 LangGraph 状态机实现。
 - LLM 输出通过 Pydantic 模型验证后再写入 Neo4j。
 - 若验证失败，工作流会根据配置的重试策略重试。
+
+## TODO
+
+- [ ] **嵌入模型变更处理：** 变更 embedding model 后，`ensure_schema` 的 `IF NOT EXISTS` 不会重建已有向量索引，导致旧维度索引与新向量不匹配。需要加入检测逻辑，在不兼容时主动 `DROP` 并重建索引。
 
 ## 许可证
 
