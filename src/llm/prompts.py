@@ -88,7 +88,6 @@ def build_llm_a_judge_messages(
     )
     user = (
         f"论文内容：\n{paper_text}\n\n"
-        f"范式库：\n{chr(10).join(PARADIGMS)}\n\n"
         f"{retrieved_text}\n\n"
         f"实践库概要：\n{practice_summary}\n"
     )

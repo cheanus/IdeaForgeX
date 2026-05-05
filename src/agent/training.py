@@ -42,12 +42,12 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
         paper_text = state.get("paper_text", "")
         if paper_text:
             return {}
-        paper_id = state["paper_id"]
+        paper_id = state["paper_id"]  # type: ignore[reportTypedDictNotRequiredAccess]
         record = load_paper_record(config, paper_id)
         return {"paper_title": record["title"], "paper_text": record["text"]}
 
     def generate_query(state: TrainingState) -> dict:
-        messages = build_query_generation_messages(state["paper_text"])
+        messages = build_query_generation_messages(state["paper_text"])  # type: ignore[reportTypedDictNotRequiredAccess]
         result = call_with_retry(
             client,
             messages,
@@ -58,14 +58,14 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
         return {"query_text": result["query_text"]}
 
     def retrieve(state: TrainingState) -> dict:
-        embeddings = client.embed([state["query_text"]])
+        embeddings = client.embed([state["query_text"]])  # type: ignore[reportTypedDictNotRequiredAccess]
         nodes = retrieve_with_traversal(neo4j_client, embeddings[0], config)
         return {"retrieved_nodes": nodes}
 
     def llm_a_judge(state: TrainingState) -> dict:
         practice_summary = build_practice_summary(neo4j_client)
         messages = build_llm_a_judge_messages(
-            state["paper_text"],
+            state["paper_text"],  # type: ignore[reportTypedDictNotRequiredAccess]
             practice_summary,
             state.get("retrieved_nodes", []),
         )
@@ -92,7 +92,7 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
         with neo4j_client.driver.session(database=config.neo4j_database) as session:
             session.run(
                 "CREATE (:PaperRecord {id: $id, title: $title})",
-                id=state["paper_id"],
+                id=state["paper_id"],  # type: ignore[reportTypedDictNotRequiredAccess]
                 title=state.get("paper_title", ""),
             )
         return {}

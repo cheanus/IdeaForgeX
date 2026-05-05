@@ -35,7 +35,7 @@ def load_paper_record(config: Config, paper_id: str) -> dict[str, Any]:
                 arxiv_id = (
                     find_arxiv_id({"title": title, "paper_id": paper_id}) or paper_id
                 )
-            full_text = arxiv.fetch_full_text(arxiv_id)
+            full_text = arxiv.fetch_full_text(arxiv_id)  # type: ignore[reportArgumentType]
             if full_text:
                 text = full_text
         except Exception:

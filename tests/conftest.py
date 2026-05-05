@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from typing import Any
 
 import pytest
 
@@ -9,7 +10,7 @@ from src.neo4j.client import Neo4jClient
 from src.neo4j.maintenance import clear_graph
 from src.neo4j.schema import ensure_schema
 
-_TEST_NEO4J_CONFIG = {
+_TEST_NEO4J_CONFIG: dict[str, Any] = {
     "neo4j_uri": "bolt://localhost:7687",
     "neo4j_user": "",
     "neo4j_password": "",
@@ -21,7 +22,7 @@ def pytest_configure(config):
 
 
 def _make_test_client() -> Neo4jClient:
-    return Neo4jClient(Config(**_TEST_NEO4J_CONFIG))
+    return Neo4jClient(Config(**_TEST_NEO4J_CONFIG))  # type: ignore[reportArgumentType]
 
 
 @pytest.fixture

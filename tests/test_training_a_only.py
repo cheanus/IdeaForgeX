@@ -55,9 +55,9 @@ def test_training_graph_routes_can_infer_to_record_paper(monkeypatch, neo4j_clie
 
     monkeypatch.setattr("src.agent.training.call_with_retry", fake_call_with_retry)
 
-    graph = build_training_graph(config, FakeEmbeddingClient(), neo4j_client)
+    graph = build_training_graph(config, FakeEmbeddingClient(), neo4j_client)  # type: ignore[reportArgumentType]
     result = graph.invoke(
-        {"paper_id": TEST_PAPER_ID, "retry_count": 0},
+        {"paper_id": TEST_PAPER_ID, "retry_count": 0},  # type: ignore[reportArgumentType]
         {"configurable": {"thread_id": TEST_PAPER_ID}},
     )
 
@@ -123,9 +123,9 @@ def test_training_graph_commits_candidates_when_cannot_infer(monkeypatch, neo4j_
 
     monkeypatch.setattr("src.agent.training.call_with_retry", fake_call_with_retry)
 
-    graph = build_training_graph(config, FakeEmbeddingClient(), neo4j_client)
+    graph = build_training_graph(config, FakeEmbeddingClient(), neo4j_client)  # type: ignore[reportArgumentType]
     result = graph.invoke(
-        {"paper_id": TEST_PAPER_ID, "retry_count": 0},
+        {"paper_id": TEST_PAPER_ID, "retry_count": 0},  # type: ignore[reportArgumentType]
         {"configurable": {"thread_id": TEST_PAPER_ID}},
     )
 
@@ -186,7 +186,7 @@ def test_training_graph_commits_node_updates(monkeypatch, neo4j_client):
         if parser is parse_llm_a_candidate:
             return LLMACandidate(
                 can_infer=False,
-                node_updates=[
+                node_updates=[  # type: ignore[reportArgumentType]
                     {"node_id": "insp-existing", "已知实例": "new example from paper"}
                 ],
             )
@@ -194,9 +194,9 @@ def test_training_graph_commits_node_updates(monkeypatch, neo4j_client):
 
     monkeypatch.setattr("src.agent.training.call_with_retry", fake_call_with_retry)
 
-    graph = build_training_graph(config, FakeEmbeddingClient(), neo4j_client)
+    graph = build_training_graph(config, FakeEmbeddingClient(), neo4j_client)  # type: ignore[reportArgumentType]
     result = graph.invoke(
-        {"paper_id": TEST_PAPER_ID, "retry_count": 0},
+        {"paper_id": TEST_PAPER_ID, "retry_count": 0},  # type: ignore[reportArgumentType]
         {"configurable": {"thread_id": TEST_PAPER_ID}},
     )
 

@@ -46,7 +46,7 @@ def test_inference_graph_generates_llm_a_candidates(monkeypatch):
 
     monkeypatch.setattr("src.agent.inference.call_with_retry", fake_call_with_retry)
 
-    graph = build_inference_graph(config, FakeEmbeddingClient(config), neo4j_client)
+    graph = build_inference_graph(config, FakeEmbeddingClient(config), neo4j_client)  # type: ignore[reportArgumentType]
     result = graph.invoke(
         {"paper_id": TEST_PAPER_ID},
         {"configurable": {"thread_id": TEST_PAPER_ID}},

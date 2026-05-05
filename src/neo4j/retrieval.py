@@ -29,7 +29,7 @@ def vector_search(
 ) -> list[RetrievalHit]:
     with client.session() as session:
         result = session.run(
-            _vector_query_cypher(index_name, k),
+            _vector_query_cypher(index_name, k),  # type: ignore[reportArgumentType]
             index=index_name,
             k=k,
             embedding=query_embedding,

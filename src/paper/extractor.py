@@ -67,7 +67,7 @@ class ArxivExtractor:
 
         document = fitz.open(stream=response.content, filetype="pdf")
         try:
-            return "\n".join(page.get_text() for page in document)
+            return "\n".join(page.get_text() for page in document)  # type: ignore[reportCallIssue,reportArgumentType]
         finally:
             document.close()
 
@@ -75,6 +75,6 @@ class ArxivExtractor:
 def extract_local_pdf_text(pdf_path: str | Path) -> str:
     document = fitz.open(str(pdf_path))
     try:
-        return "\n".join(page.get_text() for page in document)
+        return "\n".join(page.get_text() for page in document)  # type: ignore[reportCallIssue,reportArgumentType]
     finally:
         document.close()

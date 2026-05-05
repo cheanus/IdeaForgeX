@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import yaml
 from pydantic import Field
@@ -51,10 +52,10 @@ def load_config(config_file: str | Path | None = None) -> Config:
     """加载配置，允许显式指定 yaml 文件。"""
 
     path = Path(config_file or "config.yaml")
-    yaml_data: dict[str, object] = {}
+    yaml_data: dict[str, Any] = {}
     if path.exists():
         with path.open("r", encoding="utf-8") as handle:
             loaded = yaml.safe_load(handle) or {}
             if isinstance(loaded, dict):
                 yaml_data = loaded
-    return Config(config_file=path, **yaml_data)
+    return Config(config_file=path, **yaml_data)  # type: ignore[reportArgumentType]

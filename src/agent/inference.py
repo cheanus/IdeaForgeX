@@ -34,7 +34,7 @@ def build_inference_graph(
     config: Config, client: ChatClient, neo4j_client: Neo4jClient
 ):
     def load_target_paper(state: InferenceState) -> dict:
-        record = load_paper_record(config, state["paper_id"])
+        record = load_paper_record(config, state["paper_id"])  # type: ignore[reportTypedDictNotRequiredAccess]
         text = record.get("text", "")
         return {
             "paper_title": record.get("title", ""),
@@ -43,13 +43,13 @@ def build_inference_graph(
         }
 
     def retrieve(state: InferenceState) -> dict:
-        embeddings = client.embed([state["query_text"]])
+        embeddings = client.embed([state["query_text"]])  # type: ignore[reportTypedDictNotRequiredAccess]
         nodes = retrieve_with_traversal(neo4j_client, embeddings[0], config)
         return {"retrieved_nodes": nodes}
 
     def apply_llm_a(state: InferenceState) -> dict:
         messages = build_inference_messages(
-            state["paper_text"],
+            state["paper_text"],  # type: ignore[reportTypedDictNotRequiredAccess]
             state.get("retrieved_nodes", []),
         )
         payload = call_with_retry(
