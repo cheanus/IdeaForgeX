@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.models import Edge, InspirationNode, NodeType, QuestionNode, RelationType
+from src.models import Edge, InspirationNode, NodeType, NodeUpdate, QuestionNode, RelationType
 from src.neo4j.client import Neo4jClient
 
 
@@ -106,6 +106,32 @@ def batch_write(
         create_question(tx, node)
     for edge in edges:
         create_edge(tx, edge)
+
+
+def update_node(tx, update: NodeUpdate) -> None:
+    """MERGE 已有节点并 SET 指定字段。"""
+    mutable_fields = [
+        "粒度", "前提条件", "操作步骤", "已知实例",
+        "问题类型", "当前现状", "未解决部分",
+    ]
+    set_clauses: list[str] = []
+    params: dict[str, Any] = {"node_id": update.node_id}
+    for field in mutable_fields:
+        value = getattr(update, field, None)
+        if value is not None:
+            set_clauses.append(f"n.{field} = ${field}")
+            params[field] = value
+    if not set_clauses:
+        return
+    tx.run(
+        f"MATCH (n {{id: $node_id}}) SET {', '.join(set_clauses)}",
+        **params,
+    )
+
+
+def batch_update(tx, updates: list[NodeUpdate]) -> None:
+    for upd in updates:
+        update_node(tx, upd)
 
 
 def reset_practice_graph(client: Neo4jClient) -> None:

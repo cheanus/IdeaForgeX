@@ -57,8 +57,25 @@ IdeaForgeX 是一个 Agent 框架，在数据驱动下训练，使用时生成�
 | 核心描述 | string | 一句话描述（embedding 源） |
 | 向量 | list[float] | embedding API 产出，向量索引 |
 | 问题类型 | string | 理论缺口 / 工程瓶颈 / 评估缺失 / 跨领域空白 |
-| 当前现状 | string | 已有方法解决的部分 |
-| 未解决部分 | string | 具体未解决的问题 |
+| 当前现状 | string | 已有方法解决的部分（训练中可被 node_updates 更新） |
+| 未解决部分 | string | 具体未解决的问题（训练中可被 node_updates 更新） |
+
+#### 节点更新 (NodeUpdate)
+
+训练时 LLM A 可输出 `node_updates` 数组，对已有节点进行增量属性修改：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| node_id | string | 目标节点 ID（必填） |
+| 粒度 | int\|null | 仅更新 Inspiration |
+| 前提条件 | string\|null | 仅更新 Inspiration |
+| 操作步骤 | string\|null | 仅更新 Inspiration |
+| 已知实例 | string\|null | 仅更新 Inspiration |
+| 问题类型 | string\|null | 仅更新 Question |
+| 当前现状 | string\|null | 仅更新 Question |
+| 未解决部分 | string\|null | 仅更新 Question |
+
+不可更新的字段：`id`、`核心描述`、`向量`（这些是节点标识和语义载体）。
 
 #### 粒度语义
 
@@ -137,36 +154,42 @@ flowchart TD
 flowchart TD
     S["START"]
     S --> D["AMiner paper_qa_search: 按主题发现论文列表"]
-    D --> P1["逐篇: AMiner paper_info 批量获取摘要<br/>摘要不足 → arXiv web_extract 全文(备选)"]
-    P1 --> A1{"LLM A: 基于论文摘要 + 范式库 + 实践库<br/>能否推演出该论文创新点？"}
+    D --> P1["逐篇: 加载论文内容<br/>AMiner → arXiv 降级"]
+    P1 --> GEN["LLM 提炼检索查询文本<br/>1-2 句聚焦核心方法/问题"]
+    GEN --> RET["Embedding → 5 阶段图检索遍历<br/>向量搜索 → 精化链展开 → 1-hop → 2-hop → 去重截断"]
+    RET --> A1{"LLM A: 基于论文 + 检索结果 + 范式库 + 实践库<br/>判断已有节点修改/新增"}
     A1 -->|能| PAPER["记录至论文库"]
     PAPER --> D
-    A1 -->|否| A2["LLM A 在内存中生成候选结构:<br/>• N 个 Inspiration 节点 + 精化边<br/>• M 个 Question 节点<br/>• 灵感组合/灵感问题/问题组合边(含 weight)"]
-    A2 --> COMMIT["将本论文实践库候选一次性写入 Neo4j 事务"]
+    A1 -->|否| A2["LLM A 生成候选结构:<br/>• N 个 Inspiration 节点 + 精化边<br/>• M 个 Question 节点<br/>• 灵感组合/灵感问题/问题组合边(含 weight)<br/>• node_updates: 已有节点属性修改"]
+    A2 --> COMMIT["事务写入: node_updates(MATCH+SET) + 新节点/边(CREATE)"]
     COMMIT --> PAPER
 ```
 
-核心验证信号：LLM A 直接产出结构化节点与边，不依赖额外反馈环。
+核心变化（v2）：
+- 训练时先做图检索，让 LLM 了解哪些节点已存在
+- LLM 输出新增 `node_updates` 字段，指定要修改的已有节点属性
+- `commit_candidates` 先 `MATCH + SET` 更新已有节点，再 `CREATE` 新节点/边
 
 ## 6. 推理流程
 
 ```mermaid
 flowchart TD
     S["START"]
-    S --> P1["AMiner paper_detail: 获取目标论文摘要"]
-    P1 --> P2["arXiv search: 查询相关文献"]
-    P2 --> P3["摘要 embedding → 检索 + 遍历(2-hop/M=3/K=20)"]
-    P3 --> P4["LLM A: 基于检索节点集合生成结构化创新节点与边"]
-    P4 --> O["输出创新点列表"]
+    S --> P1["加载目标论文 (AMiner → arXiv 降级)"]
+    P1 --> P2["Embedding → 5 阶段图检索遍历<br/>向量搜索 → 精化链展开 → 1-hop → 2-hop → 去重截断"]
+    P2 --> P3["LLM A: 基于论文 + 检索节点 + 范式库<br/>生成结构化创新点候选"]
+    P3 --> O["返回创新点列表 (不写入 Neo4j)"]
 ```
 
 ## 7. LLM 角色
 
 | 角色 | 职责 | 输入 | 输出 |
 |---|---|---|---|
-| LLM A | 判断 + 生成节点及边 | AMiner 摘要 + 范式库 + 实践库 | 判断 + 节点 JSON + 边 JSON(含 weight) |
- 
-V1 仅保留 LLM A，直接产出结构化结果。
+| LLM A (训练-查询) | 提炼检索查询文本 | 论文全文 | `query_text` |
+| LLM A (训练-判断) | 判断 + 生成节点/边/更新 | 论文 + 检索结果 + 范式库 + 实践库概要 | `LLMACandidate` (含 `node_updates`) |
+| LLM A (推理-生成) | 生成创新点候选 | 论文 + 检索结果 + 范式库 | `LLMACandidate` (仅返回，不写入) |
+  
+V1 仅保留 LLM A，直接产出结构化结果。训练用 2 次 LLM 调用（查询生成 + 判断），推理用 1 次。
 
 ## 8. 失败库
 

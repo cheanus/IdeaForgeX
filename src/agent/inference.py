@@ -7,10 +7,14 @@ from typing import Annotated
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
+from langgraph.types import RetryPolicy
 from typing_extensions import TypedDict
 
+from src.agent.common import parse_llm_a_candidate
 from src.config import Config
 from src.llm.client import ChatClient
+from src.llm.prompts import build_inference_messages
+from src.llm.service import call_with_retry
 from src.neo4j.client import Neo4jClient
 from src.neo4j.retrieval import retrieve_with_traversal
 from src.paper.resolver import load_paper_record
@@ -44,18 +48,27 @@ def build_inference_graph(
         return {"retrieved_nodes": nodes}
 
     def apply_llm_a(state: InferenceState) -> dict:
-        return {
-            "llm_a": {
-                "paper_title": state.get("paper_title", ""),
-                "paper_text": state.get("paper_text", ""),
-                "retrieved_nodes": state.get("retrieved_nodes", []),
-            }
-        }
+        messages = build_inference_messages(
+            state["paper_text"],
+            state.get("retrieved_nodes", []),
+        )
+        payload = call_with_retry(
+            client,
+            messages,
+            max_retries=config.max_retries,
+            temperature=config.temperature_llm_a_judge,
+            parser=parse_llm_a_candidate,
+        )
+        return {"llm_a": payload.model_dump()}
 
     graph = StateGraph(InferenceState)
     graph.add_node("load_target_paper", load_target_paper)
     graph.add_node("retrieve", retrieve)
-    graph.add_node("apply_llm_a", apply_llm_a)
+    graph.add_node(
+        "apply_llm_a",
+        apply_llm_a,
+        retry_policy=RetryPolicy(max_attempts=config.max_retries),
+    )
 
     graph.add_edge(START, "load_target_paper")
     graph.add_edge("load_target_paper", "retrieve")

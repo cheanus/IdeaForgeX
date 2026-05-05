@@ -9,34 +9,73 @@ from typing import TypedDict, Annotated
 from langgraph.graph.message import add_messages
 
 class TrainingState(TypedDict):
-    paper_text: str
     paper_id: str
+    paper_title: str
+    paper_text: str
+    query_text: str          # LLM 生成的检索查询
+    retrieved_nodes: list    # 图检索结果 [{node, score}]
     can_infer: bool
-    inspirations: list  # InspirationNode
-    questions: list  # QuestionNode
-    edges: list  # Edge
+    llm_a: dict
+    inspirations: list       # InspirationNode
+    questions: list          # QuestionNode
+    edges: list              # Edge
+    node_updates: list       # NodeUpdate
     messages: Annotated[list, add_messages]
 ```
 
 ## StateGraph 模式
 
-```python
-from langgraph.graph import StateGraph, END
+### 训练 (6 节点)
 
+```python
 builder = StateGraph(TrainingState)
 
-# 节点：同步函数，接收 state 返回 dict（部分更新）
-def node_extract(state: TrainingState) -> dict:
-    text = extract_pdf(state["paper_id"])
-    return {"paper_text": text}
+builder.add_node("load_paper", load_paper)
+builder.add_node("generate_query", generate_query)       # LLM 调用 1
+builder.add_node("retrieve", retrieve)                    # 无 LLM
+builder.add_node("llm_a_judge", node_llm_a)               # LLM 调用 2 (RetryPolicy)
+builder.add_node("record_paper", record_paper)
+builder.add_node("commit_candidates", commit_candidates)
 
-builder.add_node("extract", node_extract)
-builder.add_node("llm_a_judge", node_llm_a)
+builder.add_edge(START, "load_paper")
+builder.add_edge("load_paper", "generate_query")
+builder.add_edge("generate_query", "retrieve")
+builder.add_edge("retrieve", "llm_a_judge")
 builder.add_conditional_edges("llm_a_judge", route_after_a, {
     "record_paper": "record_paper",
     "commit_candidates": "commit_candidates"
 })
+builder.add_edge("record_paper", END)
+builder.add_edge("commit_candidates", END)
 ```
+
+### commit_candidates 写入顺序
+
+```python
+def commit_candidates(state):
+    with session:
+        if node_updates:
+            session.execute_write(batch_update, node_updates)    # MATCH + SET（先更新）
+        if inspirations or questions:
+            session.execute_write(batch_write, ...)              # CREATE（后新增）
+```
+
+### 推理 (3 节点)
+
+```python
+builder = StateGraph(InferenceState)
+
+builder.add_node("load_target_paper", load_target_paper)
+builder.add_node("retrieve", retrieve)
+builder.add_node("apply_llm_a", apply_llm_a)    # LLM 调用 (RetryPolicy)
+
+builder.add_edge(START, "load_target_paper")
+builder.add_edge("load_target_paper", "retrieve")
+builder.add_edge("retrieve", "apply_llm_a")
+builder.add_edge("apply_llm_a", END)
+```
+
+推理仅返回结果，不写入 Neo4j。
 
 ## 节点编写规则
 

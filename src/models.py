@@ -62,8 +62,21 @@ class InnovationIdea(BaseModel):
     reflection: str = ""
 
 
+class NodeUpdate(BaseModel):
+    node_id: str
+    粒度: int | None = None
+    前提条件: str | None = None
+    操作步骤: str | None = None
+    已知实例: str | None = None
+    问题类型: str | None = None
+    当前现状: str | None = None
+    未解决部分: str | None = None
+
+
 class LLMACandidate(BaseModel):
     can_infer: bool = False
+    query_text: str = ""
     inspiration_nodes: list[InspirationNode] = Field(default_factory=list)
     question_nodes: list[QuestionNode] = Field(default_factory=list)
     edges: list[Edge] = Field(default_factory=list)
+    node_updates: list[NodeUpdate] = Field(default_factory=list)

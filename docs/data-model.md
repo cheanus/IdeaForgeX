@@ -104,6 +104,25 @@ CREATE (coarse)-[:INSP_REFINES {weight: 1.0}]->(fine)
 
 约束：同一精化链上所有节点同属一个方法概念。LLM A 确保它们串联为单链，无分支。
 
+### 5.5 节点更新操作
+
+训练时 LLM 可通过 `node_updates` 增量修改已有节点属性：
+
+```cypher
+MATCH (n {id: $node_id})
+SET n.前提条件 = $前提条件, n.已知实例 = $已知实例
+```
+
+仅更新非空字段，不可更新 `id`、`核心描述`、`向量`。更新作为单个事务在 `batch_write` 之前执行：
+
+```python
+def commit_candidates(state):
+    if node_updates:
+        session.execute_write(batch_update, node_updates)  # MATCH + SET
+    if inspirations or questions:
+        session.execute_write(batch_write, inspirations, questions, edges)  # CREATE
+```
+
 ## 6. 完整 Cypher 示例
 
 ### 创建一个方法概念（粒度 0/1/2）

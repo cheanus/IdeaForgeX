@@ -24,25 +24,30 @@ V1 原型阶段。LLM / Embedding 均通过 OpenAI 兼容 API 统一接入。Neo
 ~/Codes/IdeaForgeX/
 ├── AGENTS.md
 ├── pyproject.toml
-├── doc/
+├── docs/
 │   ├── design.md
 │   ├── architecture.md
 │   └── data-model.md
 ├── src/
 │   ├── main.py
 │   ├── config.py
+│   ├── models.py
 │   ├── agent/
+│   │   ├── common.py
 │   │   ├── training.py
 │   │   └── inference.py
 │   ├── neo4j/
 │   │   ├── client.py
+│   │   ├── maintenance.py
 │   │   ├── schema.py
 │   │   └── retrieval.py
 │   ├── llm/
 │   │   ├── client.py
-│   │   └── prompts.py
+│   │   ├── prompts.py
+│   │   └── service.py
 │   ├── paper/
 │   │   ├── extractor.py
+│   │   ├── resolver.py
 │   │   └── discovery.py
 │   └── models.py
 └── tests/
@@ -52,18 +57,21 @@ V1 原型阶段。LLM / Embedding 均通过 OpenAI 兼容 API 统一接入。Neo
 
 | 模块 | 职责 |
 |---|---|
-| `main.py` | CLI 入口：`bootstrap` / `train` / `infer` / `reset` / `stats` |
-| `config.py` | 环境变量 → `Config` Pydantic 对象 |
-| `models.py` | `InspirationNode`, `QuestionNode`, `Edge`, `InnovationIdea` 等 |
-| `llm/client.py` | OpenAI 兼容客户端封装（chat + embedding） |
-| `llm/prompts.py` | LLM A 的 system prompt 模板 |
-| `neo4j/client.py` | `neo4j.Driver` 连接管理，基础 CRUD |
-| `neo4j/schema.py` | 约束、向量索引创建（幂等），节点/边写入 |
+| `config.py` | 环境变量 + YAML → `Config` Pydantic 对象 |
+| `models.py` | `InspirationNode`, `QuestionNode`, `Edge`, `NodeUpdate`, `LLMACandidate`, `InnovationIdea` |
+| `llm/client.py` | OpenAI 兼容客户端封装（chat + embedding，LLM/Embedding 双 client） |
+| `llm/prompts.py` | 3 种 prompt 模板：查询生成、训练判断、推理生成 |
+| `llm/service.py` | `call_with_retry`：JSON mode LLM 调用 + 自动重试 |
+| `neo4j/client.py` | `neo4j.Driver` 连接管理 |
+| `neo4j/maintenance.py` | `clear_graph` 全量清图 + `resolve_target_uri` 端口映射 |
+| `neo4j/schema.py` | 约束/向量索引创建（幂等），节点/边写入，节点更新（`update_node`） |
 | `neo4j/retrieval.py` | 向量搜索 + 5 阶段遍历 + 去重截断 |
 | `paper/discovery.py` | AMiner 客户端：论文搜索 / 批量获取摘要 / 查重 |
-| `paper/extractor.py` | arXiv web_extract 全文 + pymupdf 本地 PDF（备选） |
-| `agent/training.py` | 训练 LangGraph StateGraph |
-| `agent/inference.py` | 推理 LangGraph StateGraph |
+| `paper/extractor.py` | arXiv API + pymupdf PDF 解析 |
+| `paper/resolver.py` | `load_paper_record`（AMiner→arXiv 降级）+ `build_practice_summary` |
+| `agent/common.py` | `parse_llm_a_candidate`、`parse_query_text` 解析器 |
+| `agent/training.py` | 训练 LangGraph：6 节点（load → query → retrieve → judge → route → commit） |
+| `agent/inference.py` | 推理 LangGraph：3 节点（load → retrieve → generate） |
 
 ## 5. 数据流
 
@@ -92,32 +100,35 @@ flowchart TD
 ```mermaid
 flowchart TD
     S["START"]
-    S --> D["论文发现 (AMiner paper_qa_search)"]
-    D --> P1["获取摘要 (AMiner paper_info batch)"]
-    P1 --> A1{"LLM_A_判断"}
-    A1 -->|能| PAPER["论文库记录"]
-    A1 -->|否| A2["LLM_A 在内存中生成节点 + 边"]
+    S --> D["load_paper: 加载论文<br/>(AMiner → arXiv 降级)"]
+    D --> GQ["generate_query: LLM 提炼检索查询"]
+    GQ --> RET["retrieve: Embedding → 5 阶段图检索"]
+    RET --> A1{"llm_a_judge: LLM 判断<br/>修改已有 / 新增节点"}
+    A1 -->|can_infer=true| PAPER["record_paper: 论文库记录"]
+    A1 -->|can_infer=false| A2["commit_candidates: node_updates(SET) + 新节点/边(CREATE)"]
     A2 --> PAPER
+    PAPER --> E["END"]
 ```
 
 LangGraph 特性：
 
-- **Checkpointer**：每步后自动 checkpoint，支持中断恢复
-- **条件边**：LLM_A 的判断结果路由到不同下游节点
-- **RetryPolicy**：LLM 调用失败自动重试
+- **6 节点**：load_paper / generate_query / retrieve / llm_a_judge / record_paper / commit_candidates
+- **2 次 LLM 调用**：查询生成 + 判断/生成（均有 RetryPolicy）
+- **条件边**：`can_infer` 路由到 `record_paper` 或 `commit_candidates`
+- **事务写入**：先 `batch_update`（MATCH+SET）后 `batch_write`（CREATE）
 
 ### 6.2 推理 StateGraph
 
 ```mermaid
 flowchart TD
     S["START"]
-    S --> P1["获取论文摘要 (AMiner paper_detail)"]
-    P1 --> P2["相关文献 (arXiv search)"]
-    P2 --> E["Embedding (查询向量)"]
-    E --> R["Neo4j 检索遍历"]
-    R --> G["LLM A 生成结构化创新节点与边"]
-    G --> O["END → 创新点列表"]
+    S --> P1["load_target_paper: 加载论文"]
+    P1 --> RET["retrieve: Embedding → 5 阶段图检索"]
+    RET --> G["apply_llm_a: LLM 生成创新点候选<br/>(RetryPolicy, 仅返回不写入)"]
+    G --> E["END"]
 ```
+
+3 节点，1 次 LLM 调用。
 
 ## 7. 检索遍历算法
 
@@ -184,18 +195,34 @@ final = sorted(candidates.values(), key=lambda t: t[1], reverse=True)[:config.fi
 
 ## 8. LLM 调用模式
 
-所有 LLM 调用通过 `llm/client.py` 的 `ChatClient`：
+所有 LLM 调用通过 `llm/service.py` 的 `call_with_retry`：
 
 ```python
-class ChatClient:
-    def chat(self, messages: list[dict], response_format=None) -> dict:
-        """调用 chat/completions，支持 JSON mode"""
-    
-    def embed(self, texts: list[str]) -> list[list[float]]:
-        """调用 embeddings，返回向量列表"""
+def call_with_retry(client, messages, max_retries=3, temperature=0.1, parser=None):
+    for attempt in range(max_retries):
+        payload = client.chat_json(messages, temperature=temperature)
+        return parser(payload) if parser else payload
 ```
 
-仅保留 LLM A，通过 `prompts.py` 的单一模板构建 messages。
+三种 prompt 模板：
+
+| 模板 | 文件 | 用途 | 调用时 parser |
+|---|---|---|---|
+| `build_query_generation_messages` | `prompts.py` | 训练：从论文提炼检索查询 | `parse_query_text` |
+| `build_llm_a_judge_messages` | `prompts.py` | 训练：判断 + 生成节点/边/更新 | `parse_llm_a_candidate` |
+| `build_inference_messages` | `prompts.py` | 推理：生成创新点候选 | `parse_llm_a_candidate` |
+
+输出结构 `LLMACandidate`：
+
+```python
+class LLMACandidate(BaseModel):
+    can_infer: bool = False
+    query_text: str = ""
+    inspiration_nodes: list[InspirationNode]
+    question_nodes: list[QuestionNode]
+    edges: list[Edge]
+    node_updates: list[NodeUpdate]  # 训练时已有节点的增量更新
+```
 
 ## 9. 错误处理策略
 

@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.models import Edge, LLMACandidate, InspirationNode, QuestionNode
+from src.models import Edge, LLMACandidate, InspirationNode, NodeUpdate, QuestionNode
+
+
+def parse_query_text(payload: dict[str, Any]) -> dict[str, str]:
+    """解析 LLM 生成的检索查询文本。"""
+    return {"query_text": payload.get("query_text", "")}
 
 
 def _coerce_records(value: Any) -> list[dict[str, Any]]:
@@ -30,6 +35,14 @@ def _coerce_records(value: Any) -> list[dict[str, Any]]:
 
 
 def _coerce_edges(value: Any) -> list[dict[str, Any]]:
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, dict)]
+    if isinstance(value, dict):
+        return [item for item in value.values() if isinstance(item, dict)]
+    return []
+
+
+def _coerce_updates(value: Any) -> list[dict[str, Any]]:
     if isinstance(value, list):
         return [item for item in value if isinstance(item, dict)]
     if isinstance(value, dict):
@@ -76,18 +89,31 @@ def parse_llm_a_candidate(payload: dict[str, Any]) -> LLMACandidate:
             {
                 "from_id": str(from_id),
                 "to_id": str(to_id),
-                "rel_type": item.get("rel_type")
-                or item.get("relation", "INSP_QUESTION"),
+                "rel_type": item.get("rel_type") or item.get("relation", "INSP_QUESTION"),
                 "weight": item.get("weight", 0.0),
             }
         )
 
+    node_updates = []
+    for item in _coerce_updates(payload.get("node_updates", [])):
+        upd: dict[str, Any] = {
+            "node_id": str(item.get("node_id", "")),
+        }
+        for field in NodeUpdate.model_fields:
+            if field == "node_id":
+                continue
+            if field in item and item[field] is not None:
+                upd[field] = item[field]
+        node_updates.append(upd)
+
     return LLMACandidate.model_validate(
         {
             "can_infer": payload.get("can_infer", False),
+            "query_text": payload.get("query_text", ""),
             "inspiration_nodes": inspiration_nodes,
             "question_nodes": question_nodes,
             "edges": edges,
+            "node_updates": node_updates,
         }
     )
 

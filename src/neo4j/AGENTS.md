@@ -86,6 +86,32 @@ def vector_search(tx, index_name: str, query_embedding: list[float], k: int):
 - 1-hop/2-hop 扩展用 `ORDER BY r.weight DESC LIMIT $M` 取 top-3。
 - 分数衰减在 Python 侧计算，不走 Cypher。
 
+## 节点更新
+
+LLM 可通过 `node_updates` 增量修改已有节点属性。不可更新 `id`、`核心描述`、`向量`。
+
+```python
+def update_node(tx, update: NodeUpdate) -> None:
+    mutable_fields = ["粒度", "前提条件", "操作步骤", "已知实例",
+                      "问题类型", "当前现状", "未解决部分"]
+    set_clauses = []
+    params = {"node_id": update.node_id}
+    for field in mutable_fields:
+        value = getattr(update, field, None)
+        if value is not None:
+            set_clauses.append(f"n.{field} = ${field}")
+            params[field] = value
+    if not set_clauses:
+        return
+    tx.run(f"MATCH (n {{id: $node_id}}) SET {', '.join(set_clauses)}", **params)
+
+def batch_update(tx, updates: list[NodeUpdate]) -> None:
+    for upd in updates:
+        update_node(tx, upd)
+```
+
+在 `commit_candidates` 中，`batch_update` 必须在 `batch_write` 之前执行（先更新后新增）。
+
 ## 边创建
 
 无向边在 Neo4j 中存为单条有向边，方向不重要（遍历用 `()-[]-()` ）。
@@ -119,5 +145,6 @@ def batch_create(tx, nodes: list[InspirationNode], edges: list[Edge]):
 | 文件 | 职责 |
 |---|---|
 | `client.py` | `Neo4jClient` 连接管理 |
-| `schema.py` | 约束/索引创建 + 节点/边写入 |
+| `schema.py` | 约束/索引创建 + 节点/边写入 + 节点更新 |
 | `retrieval.py` | 向量搜索 + 5 阶段遍历 + 去重截断 |
+| `maintenance.py` | `clear_graph` 全量清图 + `resolve_target_uri` 端口映射 |
