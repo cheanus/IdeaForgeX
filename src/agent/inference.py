@@ -37,6 +37,7 @@ def build_inference_graph(
         record = load_paper_record(config, state["paper_id"])  # type: ignore[reportTypedDictNotRequiredAccess]
         text = record.get("text", "")
         return {
+            "paper_id": record.get("paper_id", state["paper_id"]),  # type: ignore[reportTypedDictNotRequiredAccess]
             "paper_title": record.get("title", ""),
             "paper_text": text,
             "query_text": text,

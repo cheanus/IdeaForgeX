@@ -22,6 +22,10 @@ class FakeAMinerClient:
         self.config = config
         self.should_fail = should_fail
 
+    def search_papers(self, query: str, limit: int = 50):
+        """模拟语义搜索，返回匹配的论文列表。"""
+        return [{"id": TEST_ARXIV_ID, "title": query}]
+
     def get_paper_detail(self, paper_id: str):
         if self.should_fail:
             raise httpx.HTTPStatusError(
@@ -43,6 +47,12 @@ class FakeArxivExtractor:
 
     def __init__(self, config: Config):
         self.config = config
+
+    def get_paper_detail(self, arxiv_id: str):
+        return {
+            "title": ATTENTION_TITLE,
+            "abstract": ATTENTION_ABSTRACT[:500],
+        }
 
     def find_arxiv_id(self, paper: dict):
         return TEST_ARXIV_ID

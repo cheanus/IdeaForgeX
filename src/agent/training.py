@@ -44,7 +44,11 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
             return {}
         paper_id = state["paper_id"]  # type: ignore[reportTypedDictNotRequiredAccess]
         record = load_paper_record(config, paper_id)
-        return {"paper_title": record["title"], "paper_text": record["text"]}
+        return {
+            "paper_id": record["paper_id"],
+            "paper_title": record["title"],
+            "paper_text": record["text"],
+        }
 
     def generate_query(state: TrainingState) -> dict:
         messages = build_query_generation_messages(state["paper_text"])  # type: ignore[reportTypedDictNotRequiredAccess]

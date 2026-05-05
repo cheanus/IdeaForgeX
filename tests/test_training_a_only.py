@@ -61,6 +61,8 @@ def test_training_graph_routes_can_infer_to_record_paper(monkeypatch, neo4j_clie
         {"configurable": {"thread_id": TEST_PAPER_ID}},
     )
 
+    resolved_id = result.get("paper_id")
+    assert resolved_id is not None
     assert result["paper_title"] == ATTENTION_TITLE
     assert result["paper_text"] == ATTENTION_ABSTRACT
     assert result["can_infer"] is True
@@ -72,7 +74,7 @@ def test_training_graph_routes_can_infer_to_record_paper(monkeypatch, neo4j_clie
     ) as session:
         records = session.run(
             "MATCH (r:PaperRecord {id: $id}) RETURN r.title AS title",
-            id=TEST_PAPER_ID,
+            id=resolved_id,
         ).data()
         assert len(records) == 1
         assert records[0]["title"] == ATTENTION_TITLE

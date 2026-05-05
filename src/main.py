@@ -20,10 +20,14 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("reset")
 
     train = subparsers.add_parser("train")
-    train.add_argument("paper_id")
+    train.add_argument(
+        "paper", help="论文 ID（arXiv ID / AMiner ID）或标题，支持多级降级解析"
+    )
 
     infer = subparsers.add_parser("infer")
-    infer.add_argument("paper_id")
+    infer.add_argument(
+        "paper", help="论文 ID（arXiv ID / AMiner ID）或标题，支持多级降级解析"
+    )
 
     subparsers.add_parser("stats")
     return parser
@@ -47,12 +51,12 @@ def main() -> None:
             return
         if args.command == "train":
             graph = build_training_graph(config, llm_client, neo4j_client)
-            result = run_training(graph, args.paper_id)
+            result = run_training(graph, args.paper)
             print(result)
             return
         if args.command == "infer":
             graph = build_inference_graph(config, llm_client, neo4j_client)
-            result = run_inference(graph, args.paper_id)
+            result = run_inference(graph, args.paper)
             print(result)
             return
         if args.command == "stats":

@@ -1,7 +1,16 @@
-"""论文记录解析与降级。"""
+"""论文记录解析与降级。
+
+resolve_paper_spec() 接受论文 ID 或标题，按以下优先级尝试获取数据：
+1. arXiv ID 格式 → 直接 arXiv 查询
+2. AMiner ID 直接查询
+3. AMiner 语义搜索（按标题）
+4. arXiv 标题搜索
+5. arXiv 全文 PDF 降级
+"""
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from src.config import Config
@@ -9,47 +18,167 @@ from src.neo4j.client import Neo4jClient
 from src.paper.discovery import AMinerClient
 from src.paper.extractor import ArxivExtractor
 
+_ARXIV_ID_PATTERN = re.compile(r"^\d{4}\.\d{4,5}(?:v\d+)?$|^[a-z-]+/\d{7}(?:v\d+)?$")
+_MAX_TEXT_LENGTH = 12000
 
-def load_paper_record(config: Config, paper_id: str) -> dict[str, Any]:
-    """优先读 AMiner，失败时降级到 arXiv。"""
 
-    title = ""
-    text = ""
-    paper: dict[str, Any] = {}
+def _is_arxiv_id(spec: str) -> bool:
+    """判断输入是否为 arXiv ID 格式。"""
+    return bool(_ARXIV_ID_PATTERN.match(spec.strip()))
 
-    try:
-        paper = AMinerClient(config).get_paper_detail(paper_id)
-        title = paper.get("title", "")
-        text = paper.get("abstract_slice") or paper.get("abstract") or title
-    except Exception:
-        title = paper_id
-        text = ""
-        paper = {}
+
+def _load_from_arxiv(config: Config, arxiv_id: str) -> dict[str, Any]:
+    """已知 arXiv ID，直接从 arXiv 获取论文数据。"""
+    extractor = ArxivExtractor(config)
+    detail = extractor.get_paper_detail(arxiv_id)
+    title = detail.get("title", arxiv_id)
+    text = detail.get("abstract", "")
 
     if len(text) < config.arxiv_short_abstract_threshold:
         try:
-            arxiv = ArxivExtractor(config)
-            find_arxiv_id = getattr(arxiv, "find_arxiv_id", None)
-            arxiv_id = paper_id
-            if callable(find_arxiv_id):
-                arxiv_id = (
-                    find_arxiv_id({"title": title, "paper_id": paper_id}) or paper_id
-                )
-            full_text = arxiv.fetch_full_text(arxiv_id)  # type: ignore[reportArgumentType]
+            full_text = extractor.fetch_full_text(arxiv_id)
             if full_text:
                 text = full_text
         except Exception:
             pass
 
-    if len(text) > 12000:
-        text = text[:12000]
-
     return {
-        "paper_id": paper_id,
-        "title": title or paper_id,
+        "paper_id": arxiv_id,
+        "title": title or arxiv_id,
+        "text": text,
+        "paper": detail,
+    }
+
+
+def _try_aminer_direct(config: Config, spec: str) -> dict[str, Any]:
+    """尝试将 spec 作为 AMiner paper ID 直接查询。"""
+    paper = AMinerClient(config).get_paper_detail(spec)
+    title = paper.get("title", spec)
+    text = paper.get("abstract_slice") or paper.get("abstract") or ""
+    return {
+        "paper_id": paper.get("id", spec),
+        "title": title,
         "text": text,
         "paper": paper,
     }
+
+
+def _try_aminer_search(config: Config, query: str) -> dict[str, Any] | None:
+    """通过 AMiner 语义搜索查找论文，返回第一篇的详细信息。"""
+    papers = AMinerClient(config).search_papers(query, limit=3)
+    if not papers:
+        return None
+    best_id = papers[0].get("id")
+    if not best_id:
+        return None
+    paper = AMinerClient(config).get_paper_detail(best_id)
+    title = paper.get("title", query)
+    text = paper.get("abstract_slice") or paper.get("abstract") or ""
+    return {"paper_id": best_id, "title": title, "text": text, "paper": paper}
+
+
+def _try_arxiv_fallback(config: Config, title: str) -> dict[str, Any] | None:
+    """通过 arXiv 标题搜索获取论文，必要时降级到全文 PDF。"""
+    extractor = ArxivExtractor(config)
+    arxiv_id = extractor.find_arxiv_id({"title": title})
+    if not arxiv_id:
+        return None
+    detail = extractor.get_paper_detail(arxiv_id)
+    result_title = detail.get("title", title)
+    text = detail.get("abstract", "")
+
+    if len(text) < config.arxiv_short_abstract_threshold:
+        try:
+            full_text = extractor.fetch_full_text(arxiv_id)
+            if full_text:
+                text = full_text
+        except Exception:
+            pass
+
+    return {"paper_id": arxiv_id, "title": result_title, "text": text, "paper": detail}
+
+
+def _enforce_text_limit(text: str) -> str:
+    if len(text) > _MAX_TEXT_LENGTH:
+        return text[:_MAX_TEXT_LENGTH]
+    return text
+
+
+def resolve_paper_spec(config: Config, spec: str) -> dict[str, Any]:
+    """智能解析论文描述（ID 或标题），多级降级获取数据。
+
+    优先级：
+    1. arXiv ID 格式 → 直接 arXiv 查询
+    2. AMiner ID 直接查询
+    3. AMiner 语义搜索
+    4. arXiv 标题搜索 → 全文 PDF 降级
+    """
+    spec = spec.strip()
+
+    # 优先级1：arXiv ID 快速路径
+    if _is_arxiv_id(spec):
+        try:
+            result = _load_from_arxiv(config, spec)
+            result["text"] = _enforce_text_limit(result["text"])
+            return result
+        except Exception:
+            pass
+        # arXiv ID 查询失败，继续尝试其他方式
+
+    title = spec
+    text = ""
+    paper: dict[str, Any] = {}
+    paper_id = spec
+
+    # 优先级2：AMiner ID 直接查询
+    try:
+        result = _try_aminer_direct(config, spec)
+        paper = result["paper"]
+        title = result["title"]
+        text = result["text"]
+        paper_id = result["paper_id"]
+    except Exception:
+        pass
+
+    # 优先级3：AMiner 语义搜索
+    if len(text) < config.arxiv_short_abstract_threshold:
+        try:
+            result = _try_aminer_search(config, spec)
+            if result:
+                paper = result["paper"]
+                title = result["title"]
+                text = result["text"]
+                paper_id = result["paper_id"]
+        except Exception:
+            pass
+
+    # 优先级4：arXiv 标题搜索 + 全文降级
+    if len(text) < config.arxiv_short_abstract_threshold:
+        try:
+            result = _try_arxiv_fallback(config, title)
+            if result:
+                paper = result["paper"]
+                title = result["title"]
+                text = result["text"]
+                paper_id = result["paper_id"]
+        except Exception:
+            pass
+
+    return {
+        "paper_id": paper_id,
+        "title": title or spec,
+        "text": _enforce_text_limit(text),
+        "paper": paper,
+    }
+
+
+def load_paper_record(config: Config, paper_spec: str) -> dict[str, Any]:
+    """优先读 AMiner，失败时降级到 arXiv。
+
+    保留此函数以兼容旧调用方，内部委托给 resolve_paper_spec()。
+    """
+
+    return resolve_paper_spec(config, paper_spec)
 
 
 def build_practice_summary(client: Neo4jClient, limit: int = 12) -> str:

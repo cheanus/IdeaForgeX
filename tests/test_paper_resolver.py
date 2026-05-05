@@ -12,21 +12,36 @@ from src.neo4j.schema import create_inspiration, create_question
 from tests.fakes import (
     ATTENTION_ABSTRACT,
     ATTENTION_TITLE,
+    TEST_ARXIV_ID,
     FakeAMinerClient,
     FakeArxivExtractor,
 )
 
 
+def test_load_paper_record_resolves_arxiv_id_directly(monkeypatch):
+    """arXiv ID 格式应直接走 arXiv 路径，不经过 AMiner。"""
+    config = Config(arxiv_short_abstract_threshold=200)
+    monkeypatch.setattr("src.paper.resolver.ArxivExtractor", FakeArxivExtractor)
+
+    result = load_paper_record(config, "1706.03762")
+
+    assert result["paper_id"] == "1706.03762"
+    assert result["title"] == ATTENTION_TITLE
+    assert result["text"] == ATTENTION_ABSTRACT[:500]
+
+
 def test_load_paper_record_falls_back_to_arxiv_when_aminer_fails(monkeypatch):
+    """标题输入下 AMiner 失败时降级到 arXiv 搜索。"""
     config = Config(arxiv_short_abstract_threshold=200)
     monkeypatch.setattr(
         "src.paper.resolver.AMinerClient", FakeAMinerClient(config, should_fail=True)
     )
     monkeypatch.setattr("src.paper.resolver.ArxivExtractor", FakeArxivExtractor)
 
-    result = load_paper_record(config, "1706.03762")
+    result = load_paper_record(config, "Attention Is All You Need")
 
-    assert result["title"] == "1706.03762"
+    assert result["title"] == ATTENTION_TITLE
+    assert result["paper_id"] == TEST_ARXIV_ID
     assert result["text"] == ATTENTION_ABSTRACT
 
 
@@ -60,11 +75,21 @@ def test_build_practice_summary_renders_existing_nodes(neo4j_client):
 
 
 def test_load_paper_record_falls_back_to_arxiv_when_detail_fails(monkeypatch):
+    """标题输入下 AMiner ID 查询和搜索均失败时降级到 arXiv。"""
     config = Config(arxiv_short_abstract_threshold=200)
 
     class FailingAMinerClient:
         def __init__(self, config):
             self.config = config
+
+        def search_papers(self, query: str, limit: int = 50):
+            raise httpx.HTTPStatusError(
+                "boom",
+                request=httpx.Request("GET", "https://example.test"),
+                response=httpx.Response(
+                    500, request=httpx.Request("GET", "https://example.test")
+                ),
+            )
 
         def get_paper_detail(self, paper_id: str):
             raise httpx.HTTPStatusError(
@@ -78,9 +103,10 @@ def test_load_paper_record_falls_back_to_arxiv_when_detail_fails(monkeypatch):
     monkeypatch.setattr("src.paper.resolver.AMinerClient", FailingAMinerClient)
     monkeypatch.setattr("src.paper.resolver.ArxivExtractor", FakeArxivExtractor)
 
-    result = load_paper_record(config, "1706.03762")
+    result = load_paper_record(config, "Attention Is All You Need")
 
-    assert result["title"] == "1706.03762"
+    assert result["title"] == ATTENTION_TITLE
+    assert result["paper_id"] == TEST_ARXIV_ID
     assert result["text"] == ATTENTION_ABSTRACT
 
 

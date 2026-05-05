@@ -10,6 +10,7 @@ from tests.fakes import (
     ATTENTION_ABSTRACT,
     ATTENTION_TITLE,
     FakeAMinerClient,
+    FakeArxivExtractor,
     TEST_PAPER_ID,
 )
 
@@ -28,6 +29,7 @@ def test_inference_graph_generates_llm_a_candidates(monkeypatch):
     retrieved_nodes = [{"node": {"id": "insp-1", "type": "Inspiration"}, "score": 0.99}]
 
     monkeypatch.setattr("src.paper.resolver.AMinerClient", FakeAMinerClient)
+    monkeypatch.setattr("src.paper.resolver.ArxivExtractor", FakeArxivExtractor)
     monkeypatch.setattr(
         "src.agent.inference.retrieve_with_traversal",
         lambda client, embedding, cfg: retrieved_nodes,
