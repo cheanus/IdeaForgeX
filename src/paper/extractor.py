@@ -29,8 +29,12 @@ class ArxivExtractor:
         entry = root.find("atom:entry", ns)
         if entry is None:
             return {"title": arxiv_id, "abstract_slice": "", "abstract": ""}
-        title = (entry.findtext("atom:title", default="", namespaces=ns) or arxiv_id).strip()
-        abstract = (entry.findtext("atom:summary", default="", namespaces=ns) or "").strip()
+        title = (
+            entry.findtext("atom:title", default="", namespaces=ns) or arxiv_id
+        ).strip()
+        abstract = (
+            entry.findtext("atom:summary", default="", namespaces=ns) or ""
+        ).strip()
         return {"title": title, "abstract_slice": abstract[:500], "abstract": abstract}
 
     def find_arxiv_id(self, paper: dict[str, Any]) -> str | None:
@@ -46,9 +50,15 @@ class ArxivExtractor:
 
     def fetch_full_text(self, arxiv_id: str) -> str:
         response = httpx.get(f"https://arxiv.org/pdf/{arxiv_id}.pdf", timeout=60.0)
-        if response.status_code in {301, 302, 307, 308} and response.headers.get("location"):
+        if response.status_code in {301, 302, 307, 308} and response.headers.get(
+            "location"
+        ):
             location = response.headers["location"]
-            next_url = location if location.startswith("http") else f"https://arxiv.org{location}"
+            next_url = (
+                location
+                if location.startswith("http")
+                else f"https://arxiv.org{location}"
+            )
             response = httpx.get(next_url, timeout=60.0)
         response.raise_for_status()
         import fitz  # pymupdf

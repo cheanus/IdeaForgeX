@@ -5,11 +5,9 @@ target="${1:-test}"
 case "$target" in
   test)
     uri="bolt://localhost:7687"
-    password="test-password"
     ;;
   personal)
     uri="bolt://localhost:7688"
-    password="personal-password"
     ;;
   *)
     printf 'unknown target: %s\n' "$target" >&2
@@ -20,7 +18,7 @@ esac
 uv run python - <<PY
 from neo4j import GraphDatabase
 
-driver = GraphDatabase.driver("$uri", auth=("neo4j", "$password"))
+driver = GraphDatabase.driver("$uri", auth=None)
 try:
     with driver.session(database="neo4j") as session:
         session.run("MATCH (n) DETACH DELETE n")

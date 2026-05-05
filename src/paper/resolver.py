@@ -33,7 +33,9 @@ def load_paper_record(config: Config, paper_id: str) -> dict[str, Any]:
             find_arxiv_id = getattr(arxiv, "find_arxiv_id", None)
             arxiv_id = paper_id
             if callable(find_arxiv_id):
-                arxiv_id = find_arxiv_id({"title": title, "paper_id": paper_id}) or paper_id
+                arxiv_id = (
+                    find_arxiv_id({"title": title, "paper_id": paper_id}) or paper_id
+                )
             full_text = arxiv.fetch_full_text(arxiv_id)
             if full_text:
                 text = full_text
@@ -60,6 +62,7 @@ def build_practice_summary(client: Neo4jClient, limit: int = 12) -> str:
         return list(result)
 
     with client.driver.session(database=client.config.neo4j_database) as session:
+
         def _extract_node(record: Any) -> dict[str, Any]:
             if hasattr(record, "data"):
                 data = record.data()
