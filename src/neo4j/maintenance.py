@@ -14,5 +14,5 @@ def resolve_target_uri(target: str) -> str:
 
 
 def clear_graph(client: Neo4jClient) -> None:
-    with client.driver.session(database=client.config.neo4j_database) as session:
+    with client.session() as session:
         session.run("MATCH (n) DETACH DELETE n")

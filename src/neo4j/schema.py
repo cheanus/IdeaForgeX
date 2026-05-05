@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.models import Edge, InspirationNode, NodeType, NodeUpdate, QuestionNode, RelationType
+from src.models import Edge, InspirationNode, NodeUpdate, QuestionNode, RelationType
 from src.neo4j.client import Neo4jClient
 
 
 def ensure_schema(client: Neo4jClient) -> None:
-    with client.driver.session(database=client.config.neo4j_database) as session:
+    with client.session() as session:
         session.run(
             "CREATE CONSTRAINT insp_id_unique IF NOT EXISTS FOR (n:Inspiration) REQUIRE n.id IS UNIQUE"
         )
@@ -111,8 +111,13 @@ def batch_write(
 def update_node(tx, update: NodeUpdate) -> None:
     """MERGE 已有节点并 SET 指定字段。"""
     mutable_fields = [
-        "粒度", "前提条件", "操作步骤", "已知实例",
-        "问题类型", "当前现状", "未解决部分",
+        "粒度",
+        "前提条件",
+        "操作步骤",
+        "已知实例",
+        "问题类型",
+        "当前现状",
+        "未解决部分",
     ]
     set_clauses: list[str] = []
     params: dict[str, Any] = {"node_id": update.node_id}
@@ -135,6 +140,6 @@ def batch_update(tx, updates: list[NodeUpdate]) -> None:
 
 
 def reset_practice_graph(client: Neo4jClient) -> None:
-    with client.driver.session(database=client.config.neo4j_database) as session:
+    with client.session() as session:
         session.run("MATCH (n:Inspiration) DETACH DELETE n")
         session.run("MATCH (n:Question) DETACH DELETE n")

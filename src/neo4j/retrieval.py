@@ -27,7 +27,7 @@ def _vector_query_cypher(index_name: str, k: int) -> str:
 def vector_search(
     client: Neo4jClient, index_name: str, query_embedding: list[float], k: int
 ) -> list[RetrievalHit]:
-    with client.driver.session(database=client.config.neo4j_database) as session:
+    with client.session() as session:
         result = session.run(
             _vector_query_cypher(index_name, k),
             index=index_name,
@@ -50,7 +50,7 @@ def expand_refinement_chain(client: Neo4jClient, hit_id: str) -> list[dict[str, 
     }
     RETURN DISTINCT finer
     """
-    with client.driver.session(database=client.config.neo4j_database) as session:
+    with client.session() as session:
         result = session.run(query, hit_id=hit_id)
         return [record["finer"].data() for record in result]
 
@@ -64,7 +64,7 @@ def hop_expand(
     ORDER BY weight DESC
     LIMIT $max_neighbors
     """
-    with client.driver.session(database=client.config.neo4j_database) as session:
+    with client.session() as session:
         result = session.run(query, node_id=node_id, max_neighbors=max_neighbors)
         return [
             {"node": record["m"].data(), "weight": float(record["weight"])}

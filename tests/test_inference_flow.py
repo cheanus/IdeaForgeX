@@ -6,24 +6,12 @@ from src.agent.common import parse_llm_a_candidate
 from src.agent.inference import build_inference_graph
 from src.config import Config
 from src.models import LLMACandidate
-
-ATTENTION_TITLE = "Attention Is All You Need"
-ATTENTION_ABSTRACT = (
-    "We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, "
-    "dispensing with recurrence and convolutions."
+from tests.fakes import (
+    ATTENTION_ABSTRACT,
+    ATTENTION_TITLE,
+    FakeAMinerClient,
+    TEST_PAPER_ID,
 )
-
-
-class FakePaperClient:
-    def __init__(self, config: Config):
-        self.config = config
-
-    def get_paper_detail(self, paper_id: str):
-        return {
-            "id": paper_id,
-            "title": ATTENTION_TITLE,
-            "abstract_slice": ATTENTION_ABSTRACT,
-        }
 
 
 class FakeEmbeddingClient:
@@ -39,13 +27,15 @@ def test_inference_graph_generates_llm_a_candidates(monkeypatch):
     neo4j_client = SimpleNamespace(config=config, driver=SimpleNamespace())
     retrieved_nodes = [{"node": {"id": "insp-1", "type": "Inspiration"}, "score": 0.99}]
 
-    monkeypatch.setattr("src.paper.resolver.AMinerClient", FakePaperClient)
+    monkeypatch.setattr("src.paper.resolver.AMinerClient", FakeAMinerClient)
     monkeypatch.setattr(
         "src.agent.inference.retrieve_with_traversal",
         lambda client, embedding, cfg: retrieved_nodes,
     )
 
-    def fake_call_with_retry(client, messages, max_retries=3, temperature=0.1, parser=None):
+    def fake_call_with_retry(
+        client, messages, max_retries=3, temperature=0.1, parser=None
+    ):
         assert parser is parse_llm_a_candidate
         return LLMACandidate(
             can_infer=False,
@@ -58,8 +48,8 @@ def test_inference_graph_generates_llm_a_candidates(monkeypatch):
 
     graph = build_inference_graph(config, FakeEmbeddingClient(config), neo4j_client)
     result = graph.invoke(
-        {"paper_id": "paper-1706.03762"},
-        {"configurable": {"thread_id": "paper-1706.03762"}},
+        {"paper_id": TEST_PAPER_ID},
+        {"configurable": {"thread_id": TEST_PAPER_ID}},
     )
 
     assert result["paper_title"] == ATTENTION_TITLE

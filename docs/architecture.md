@@ -227,7 +227,7 @@ class LLMACandidate(BaseModel):
 ## 9. 错误处理策略
 
 | 场景 | 策略 |
-|---|---|---|
+|---|---|
 | LLM JSON 解析失败 | RetryPolicy 自动重试，超过 `max_retries` 直接失败 |
 | Neo4j 连接失败 | 抛异常退出，不静默 |
 | 向量索引不存在 | `schema.py` 首次运行时幂等创建 |

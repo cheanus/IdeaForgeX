@@ -6,7 +6,6 @@ from typing import Any
 
 from src.config import Config
 from src.neo4j.client import Neo4jClient
-from src.neo4j.schema import reset_practice_graph
 from src.paper.discovery import AMinerClient
 from src.paper.extractor import ArxivExtractor
 
@@ -61,7 +60,7 @@ def build_practice_summary(client: Neo4jClient, limit: int = 12) -> str:
             return []
         return list(result)
 
-    with client.driver.session(database=client.config.neo4j_database) as session:
+    with client.session() as session:
 
         def _extract_node(record: Any) -> dict[str, Any]:
             if hasattr(record, "data"):

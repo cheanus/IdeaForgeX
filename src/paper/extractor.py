@@ -8,9 +8,12 @@ from pathlib import Path
 from typing import Any
 from xml.etree import ElementTree as ET
 
+import fitz  # pymupdf
 import httpx
 
 from src.config import Config
+
+_ARXIV_PDF_BASE = "https://arxiv.org"
 
 
 @dataclass
@@ -49,7 +52,7 @@ class ArxivExtractor:
         return match.group(1) if match else None
 
     def fetch_full_text(self, arxiv_id: str) -> str:
-        response = httpx.get(f"https://arxiv.org/pdf/{arxiv_id}.pdf", timeout=60.0)
+        response = httpx.get(f"{_ARXIV_PDF_BASE}/pdf/{arxiv_id}.pdf", timeout=60.0)
         if response.status_code in {301, 302, 307, 308} and response.headers.get(
             "location"
         ):
@@ -57,11 +60,10 @@ class ArxivExtractor:
             next_url = (
                 location
                 if location.startswith("http")
-                else f"https://arxiv.org{location}"
+                else f"{_ARXIV_PDF_BASE}{location}"
             )
             response = httpx.get(next_url, timeout=60.0)
         response.raise_for_status()
-        import fitz  # pymupdf
 
         document = fitz.open(stream=response.content, filetype="pdf")
         try:
@@ -71,8 +73,6 @@ class ArxivExtractor:
 
 
 def extract_local_pdf_text(pdf_path: str | Path) -> str:
-    import fitz  # pymupdf
-
     document = fitz.open(str(pdf_path))
     try:
         return "\n".join(page.get_text() for page in document)

@@ -9,16 +9,25 @@ from src.neo4j.client import Neo4jClient
 from src.neo4j.maintenance import clear_graph
 from src.neo4j.schema import ensure_schema
 
+_TEST_NEO4J_CONFIG = {
+    "neo4j_uri": "bolt://localhost:7687",
+    "neo4j_user": "",
+    "neo4j_password": "",
+}
+
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "neo4j: requires Neo4j test container")
 
 
+def _make_test_client() -> Neo4jClient:
+    return Neo4jClient(Config(**_TEST_NEO4J_CONFIG))
+
+
 @pytest.fixture
 def neo4j_client():
     """连接到 neo4j-test 容器的客户端。"""
-    config = Config(neo4j_uri="bolt://localhost:7687", neo4j_user="", neo4j_password="")
-    client = Neo4jClient(config)
+    client = _make_test_client()
     yield client
     client.close()
 
@@ -30,8 +39,7 @@ def _reset_neo4j_for_marked_tests(request):
         return
     if os.getenv("IDEAFORGEX_SKIP_NEO4J_RESET") == "1":
         return
-    config = Config(neo4j_uri="bolt://localhost:7687", neo4j_user="", neo4j_password="")
-    client = Neo4jClient(config)
+    client = _make_test_client()
     try:
         clear_graph(client)
         ensure_schema(client)

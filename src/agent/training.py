@@ -107,8 +107,7 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
         ]
         edges = [Edge.model_validate(item) for item in state.get("edges", [])]
         node_updates = [
-            NodeUpdate.model_validate(item)
-            for item in state.get("node_updates", [])
+            NodeUpdate.model_validate(item) for item in state.get("node_updates", [])
         ]
         with neo4j_client.driver.session(database=config.neo4j_database) as session:
             if node_updates:

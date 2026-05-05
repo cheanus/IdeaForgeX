@@ -34,15 +34,7 @@ def _coerce_records(value: Any) -> list[dict[str, Any]]:
     return []
 
 
-def _coerce_edges(value: Any) -> list[dict[str, Any]]:
-    if isinstance(value, list):
-        return [item for item in value if isinstance(item, dict)]
-    if isinstance(value, dict):
-        return [item for item in value.values() if isinstance(item, dict)]
-    return []
-
-
-def _coerce_updates(value: Any) -> list[dict[str, Any]]:
+def _coerce_list_of_dicts(value: Any) -> list[dict[str, Any]]:
     if isinstance(value, list):
         return [item for item in value if isinstance(item, dict)]
     if isinstance(value, dict):
@@ -58,9 +50,11 @@ def parse_llm_a_candidate(payload: dict[str, Any]) -> LLMACandidate:
                 "id": str(item.get("id", "")),
                 "核心描述": item.get("核心描述") or item.get("content", ""),
                 "向量": item.get("向量") or item.get("embedding", []),
-                "粒度": item.get("粒度")
-                if item.get("粒度") is not None
-                else item.get("granularity", 0),
+                "粒度": (
+                    item.get("粒度")
+                    if item.get("粒度") is not None
+                    else item.get("granularity", 0)
+                ),
                 "前提条件": item.get("前提条件", ""),
                 "操作步骤": item.get("操作步骤", ""),
                 "已知实例": item.get("已知实例", ""),
@@ -82,20 +76,21 @@ def parse_llm_a_candidate(payload: dict[str, Any]) -> LLMACandidate:
         )
 
     edges = []
-    for item in _coerce_edges(payload.get("edges", [])):
+    for item in _coerce_list_of_dicts(payload.get("edges", [])):
         from_id = item.get("from_id") or item.get("source", "")
         to_id = item.get("to_id") or item.get("target", "")
         edges.append(
             {
                 "from_id": str(from_id),
                 "to_id": str(to_id),
-                "rel_type": item.get("rel_type") or item.get("relation", "INSP_QUESTION"),
+                "rel_type": item.get("rel_type")
+                or item.get("relation", "INSP_QUESTION"),
                 "weight": item.get("weight", 0.0),
             }
         )
 
     node_updates = []
-    for item in _coerce_updates(payload.get("node_updates", [])):
+    for item in _coerce_list_of_dicts(payload.get("node_updates", [])):
         upd: dict[str, Any] = {
             "node_id": str(item.get("node_id", "")),
         }
@@ -116,15 +111,3 @@ def parse_llm_a_candidate(payload: dict[str, Any]) -> LLMACandidate:
             "node_updates": node_updates,
         }
     )
-
-
-def dump_nodes(
-    inspirations: list[InspirationNode],
-    questions: list[QuestionNode],
-    edges: list[Edge],
-) -> dict[str, Any]:
-    return {
-        "inspirations": [node.model_dump() for node in inspirations],
-        "questions": [node.model_dump() for node in questions],
-        "edges": [edge.model_dump() for edge in edges],
-    }

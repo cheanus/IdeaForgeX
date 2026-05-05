@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 from neo4j import GraphDatabase
@@ -20,6 +21,11 @@ class Neo4jClient:
             else (self.config.neo4j_user, self.config.neo4j_password)
         )
         self.driver = GraphDatabase.driver(self.config.neo4j_uri, auth=auth)
+
+    @contextmanager
+    def session(self):
+        with self.driver.session(database=self.config.neo4j_database) as session:
+            yield session
 
     def close(self) -> None:
         self.driver.close()
