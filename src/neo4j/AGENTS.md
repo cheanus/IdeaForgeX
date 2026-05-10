@@ -56,7 +56,7 @@ def ensure_schema(driver):
             CREATE VECTOR INDEX idx_insp_vector IF NOT EXISTS
             FOR (n:Inspiration) ON (n.向量)
             OPTIONS {indexConfig: {
-                `vector.dimensions`: 1536,
+                `vector.dimensions`: $embedding_dim,
                 `vector.similarity_function`: 'cosine'
             }}
         """)

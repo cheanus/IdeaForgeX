@@ -92,7 +92,7 @@ def call_with_retry(client: ChatClient, messages: list[dict], max_retries: int =
     for attempt in range(max_retries):
         try:
             return client.chat_json(messages)
-        except (json.JSONDecodeError, KeyError) as e:
+        except (json.JSONDecodeError, KeyError, ValueError, openai.APIError) as e:
             if attempt == max_retries - 1:
                 raise
             logger.warning(f"JSON 解析失败 (attempt {attempt+1}): {e}")

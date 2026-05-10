@@ -9,7 +9,7 @@ V1 原型阶段。LLM / Embedding 均通过 OpenAI 兼容 API 统一接入。Neo
 | 层次 | 选型 |
 |---|---|
 | Agent 框架 | LangGraph |
-| LLM SDK | langchain-openai |
+| LLM SDK | openai |
 | 图数据库 | Neo4j Community |
 | 论文来源 | AMiner API (付费) + arXiv (免费备选) |
 | 向量检索 | Neo4j HNSW 向量索引 |

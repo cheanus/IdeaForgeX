@@ -9,12 +9,10 @@
 
 ## AMiner 客户端
 
-AMiner 是 HTTP REST API，用 `httpx` 直接调。不引入 SDK。
+AMiner 是 HTTP REST API，用 `httpx` 直接调。不引入 SDK。base URL 通过 `config.aminer_base_url` 配置。
 
 ```python
 import httpx
-
-AMINER_BASE = "https://datacenter.aminer.cn/gateway/open_platform"
 
 class AMinerClient:
     def __init__(self, api_key: str):
@@ -27,9 +25,9 @@ class AMinerClient:
     # ── 论文发现 ──
 
     def search_papers(self, query: str, limit: int = 50) -> list[dict]:
-        """paper_qa_search: 语义搜索论文（¥0.05/次）"""
+        """paper_qa_search: 语义搜索论文"""
         resp = httpx.post(
-            f"{AMINER_BASE}/api/paper/qa/search",
+            f"{self.base_url}/api/paper/qa/search",
             headers=self.headers,
             json={"query": query, "size": limit, "sci_flag": True}
         )
@@ -38,18 +36,18 @@ class AMinerClient:
     # ── 摘要获取 ──
 
     def get_abstracts_batch(self, ids: list[str]) -> list[dict]:
-        """paper_info: 批量获取摘要（免费）"""
+        """paper_info: 批量获取摘要"""
         resp = httpx.post(
-            f"{AMINER_BASE}/api/paper/info",
+            f"{self.base_url}/api/paper/info",
             headers=self.headers,
             json={"ids": ids}
         )
         return resp.json()["data"]
 
     def get_paper_detail(self, paper_id: str) -> dict:
-        """paper_detail: 单篇完整元数据（¥0.01/篇）"""
+        """paper_detail: 单篇完整元数据"""
         resp = httpx.get(
-            f"{AMINER_BASE}/api/paper/detail?id={paper_id}",
+            f"{self.base_url}/api/paper/detail?id={paper_id}",
             headers=self.headers
         )
         return resp.json()["data"]
@@ -57,7 +55,7 @@ class AMinerClient:
     # ── 查重 ──
 
     def dedup_search(self, idea_text: str, limit: int = 5) -> list[dict]:
-        """用创新点描述搜索已有论文（¥0.05/次）"""
+        """用创新点描述搜索已有论文"""
         return self.search_papers(idea_text, limit=limit)
 ```
 
@@ -102,40 +100,25 @@ def fetch_full_text(arxiv_id: str) -> str:
 
 > arXiv 搜索有速率限制（~1 req/3s），全文获取不阻塞训练主流程。
 
-## 训练流程中的论文获取
+## 论文解析流程
+
+实际训练/推理中，`resolver.py` 提供 `resolve_paper_spec()` 实现多级降级解析：
+1. arXiv ID 格式 → 直接 arXiv 查询
+2. AMiner ID 直接查询
+3. AMiner 语义搜索（按标题）
+4. arXiv 标题搜索 → 全文 PDF 降级
 
 ```python
-async def fetch_training_papers(topic: str, limit: int = 50):
-    client = AMinerClient(config.aminer_api_key)
+from src.paper.resolver import resolve_paper_spec
 
-    # Step 1: 发现论文
-    papers = client.search_papers(topic, limit=limit)
-    ids = [p["id"] for p in papers]
-
-    # Step 2: 批量获取摘要（免费）
-    abstracts = client.get_abstracts_batch(ids)
-
-    # Step 3: 逐篇处理
-    for paper in abstracts:
-        text = paper.get("abstract_slice", "")
-        if len(text) < 200:  # 摘要太短
-            arxiv_id = find_arxiv_id(paper)
-            if arxiv_id:
-                text = fetch_full_text(arxiv_id)  # 降级到 arXiv 全文
-        yield paper["id"], text
-```
-
-## 推理流程中的查重
-
-```python
-def check_novelty(idea_text: str) -> list[dict]:
-    client = AMinerClient(config.aminer_api_key)
-    return client.dedup_search(idea_text, limit=5)
+record = resolve_paper_spec(config, "Attention Is All You Need")
+# => {"paper_id": ..., "title": ..., "text": ..., "paper": ...}
 ```
 
 ## 文件职责
 
 | 文件 | 职责 |
-|---|---|
-| `discovery.py` | `AMinerClient` + arXiv 全文备用逻辑 |
-| `extractor.py` | pymupdf 本地 PDF → 文本（仅当用户提供本地 PDF） |
+|---|---------|
+| `discovery.py` | `AMinerClient` 论文搜索与详情获取 |
+| `extractor.py` | `ArxivExtractor` — arXiv API 查询 + pymupdf PDF 全文提取 |
+| `resolver.py` | `resolve_paper_spec` 多级降级解析 + `build_practice_summary` |

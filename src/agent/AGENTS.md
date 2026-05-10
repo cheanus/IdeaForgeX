@@ -99,12 +99,11 @@ builder.add_node("llm_a_judge", node_llm_a, retry_policy=RetryPolicy(max_attempt
 ```python
 from langgraph.checkpoint.memory import MemorySaver
 
-graph = builder.compile(checkpointer=MemorySaver())
-config = {"configurable": {"thread_id": paper_id}}
+    graph = builder.compile(checkpointer=MemorySaver())
+    config = {"configurable": {"thread_id": paper_id}}
 
-# 执行
-for event in graph.stream(initial_state, config):
-    ...
+    # 执行
+    result = graph.invoke(initial_state, config)
 ```
 
 用 `thread_id = paper_id` 保证每篇论文独立 checkpoint。

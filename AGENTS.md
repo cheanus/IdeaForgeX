@@ -1,6 +1,6 @@
 # IdeaForgeX
 
-LLM 论文创新点生成系统。设计文档见 `doc/`：
+LLM 论文创新点生成系统。设计文档见 `docs/`：
 
 | 文件 | 内容 |
 |---|---|
@@ -27,7 +27,7 @@ LLM 返回 JSON → `models.py` 的 Pydantic 验证 → 写入 Neo4j。验证失
 
 ### 错误处理
 
-- LLM JSON 解析失败：重试，超过 `max_retries` 记录失败库。
+- LLM JSON 解析失败：重试，超过 `max_retries` 终止。
 - Neo4j 连接失败：抛异常退出，不静默。
 - AMiner API 失败：重试 3 次，仍失败跳过该论文。
 - arXiv 全文获取失败：降级为仅用摘要。
@@ -36,7 +36,6 @@ LLM 返回 JSON → `models.py` 的 Pydantic 验证 → 写入 Neo4j。验证失
 ### 测试
 
 ```bash
-uv format
 pyright
 uv run pytest -v
 ```
