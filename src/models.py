@@ -3,9 +3,17 @@
 from __future__ import annotations
 
 from enum import Enum
+from typing import Any, Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, Field, model_validator
+
+
+# 粒度常量：1=抽象范式, 2=通用方法, 3=技术实现
+Granularity = Literal[1, 2, 3]
+GRANULARITY_LABELS: dict[int, str] = {1: "抽象范式", 2: "通用方法", 3: "技术实现"}
+GRANULARITY_MIN: Literal[1] = 1
+GRANULARITY_MAX: Literal[3] = 3
 
 
 class NodeType(str, Enum):
@@ -33,7 +41,7 @@ class BaseGraphNode(BaseModel):
 
 class InspirationNode(BaseGraphNode):
     type: str = NodeType.inspiration.value
-    粒度: int = 0
+    粒度: Granularity = 1
     前提条件: str = ""
     操作步骤: str = ""
     已知实例: str = ""
@@ -64,7 +72,7 @@ class InnovationIdea(BaseModel):
 
 class NodeUpdate(BaseModel):
     node_id: str
-    粒度: int | None = None
+    粒度: Granularity | None = None
     前提条件: str | None = None
     操作步骤: str | None = None
     已知实例: str | None = None

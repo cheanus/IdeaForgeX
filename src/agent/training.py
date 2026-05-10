@@ -10,7 +10,11 @@ from langgraph.graph.message import add_messages
 from langgraph.types import RetryPolicy
 from typing_extensions import TypedDict
 
-from src.agent.common import parse_llm_a_candidate, parse_query_text
+from src.agent.common import (
+    parse_llm_a_candidate,
+    parse_query_text,
+    validate_and_fix_refinement_edges,
+)
 from src.config import Config
 from src.llm.client import ChatClient
 from src.llm.prompts import build_llm_a_judge_messages, build_query_generation_messages
@@ -113,6 +117,11 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
         node_updates = [
             NodeUpdate.model_validate(item) for item in state.get("node_updates", [])
         ]
+
+        # 校验 INSP_REFINES 边的粒度递进约束
+        edges = validate_and_fix_refinement_edges(
+            edges, inspirations, state.get("retrieved_nodes", [])
+        )
 
         # 用真实 embedding 替换 LLM 虚构的向量，确保向量索引可用
         all_descs = [n.核心描述 for n in inspirations] + [q.核心描述 for q in questions]

@@ -10,7 +10,7 @@ from langgraph.graph.message import add_messages
 from langgraph.types import RetryPolicy
 from typing_extensions import TypedDict
 
-from src.agent.common import parse_llm_a_candidate
+from src.agent.common import parse_llm_a_candidate, validate_and_fix_refinement_edges
 from src.config import Config
 from src.llm.client import ChatClient
 from src.llm.prompts import build_inference_messages
@@ -59,6 +59,11 @@ def build_inference_graph(
             max_retries=config.max_retries,
             temperature=config.temperature_llm_a_judge,
             parser=parse_llm_a_candidate,
+        )
+
+        # 校验 INSP_REFINES 边的粒度递进约束
+        payload.edges = validate_and_fix_refinement_edges(
+            payload.edges, payload.inspiration_nodes, state.get("retrieved_nodes", [])
         )
 
         # 用真实 embedding 替换 LLM 虚构的向量

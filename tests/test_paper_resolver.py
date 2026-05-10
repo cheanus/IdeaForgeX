@@ -52,7 +52,7 @@ def test_build_practice_summary_renders_existing_nodes(neo4j_client):
     insp = InspirationNode(
         id="i1",
         核心描述="desc",
-        粒度=0,
+        粒度=1,
         向量=[0.0] * dim,
     )
     q = QuestionNode(
@@ -70,7 +70,7 @@ def test_build_practice_summary_renders_existing_nodes(neo4j_client):
 
     summary = build_practice_summary(neo4j_client, limit=5)
 
-    assert "i1: desc (粒度 0)" in summary
+    assert "i1: desc (粒度 1)" in summary
     assert "q1: question (理论缺口)" in summary
 
 
