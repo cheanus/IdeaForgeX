@@ -113,6 +113,17 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
         node_updates = [
             NodeUpdate.model_validate(item) for item in state.get("node_updates", [])
         ]
+
+        # 用真实 embedding 替换 LLM 虚构的向量，确保向量索引可用
+        all_descs = [n.核心描述 for n in inspirations] + [q.核心描述 for q in questions]
+        if all_descs:
+            real_embeddings = client.embed(all_descs)
+            insp_count = len(inspirations)
+            for i, emb in enumerate(real_embeddings[:insp_count]):
+                inspirations[i].向量 = emb
+            for j, emb in enumerate(real_embeddings[insp_count:]):
+                questions[j].向量 = emb
+
         with neo4j_client.driver.session(database=config.neo4j_database) as session:
             if node_updates:
                 session.execute_write(batch_update, node_updates)

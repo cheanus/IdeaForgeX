@@ -60,6 +60,17 @@ def build_inference_graph(
             temperature=config.temperature_llm_a_judge,
             parser=parse_llm_a_candidate,
         )
+
+        # 用真实 embedding 替换 LLM 虚构的向量
+        all_descs = [n.核心描述 for n in payload.inspiration_nodes] + [q.核心描述 for q in payload.question_nodes]
+        if all_descs:
+            real_embeddings = client.embed(all_descs)
+            insp_count = len(payload.inspiration_nodes)
+            for i, emb in enumerate(real_embeddings[:insp_count]):
+                payload.inspiration_nodes[i].向量 = emb
+            for j, emb in enumerate(real_embeddings[insp_count:]):
+                payload.question_nodes[j].向量 = emb
+
         return {"llm_a": payload.model_dump()}
 
     graph = StateGraph(InferenceState)

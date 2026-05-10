@@ -35,7 +35,7 @@ def vector_search(
             embedding=query_embedding,
         )
         return [
-            RetrievalHit(node=record["node"].data(), score=float(record["score"]))
+            RetrievalHit(node=dict(record["node"]), score=float(record["score"]))
             for record in result
         ]
 
@@ -52,7 +52,7 @@ def expand_refinement_chain(client: Neo4jClient, hit_id: str) -> list[dict[str, 
     """
     with client.session() as session:
         result = session.run(query, hit_id=hit_id)
-        return [record["finer"].data() for record in result]
+        return [dict(record["finer"]) for record in result]
 
 
 def hop_expand(
@@ -67,7 +67,7 @@ def hop_expand(
     with client.session() as session:
         result = session.run(query, node_id=node_id, max_neighbors=max_neighbors)
         return [
-            {"node": record["m"].data(), "weight": float(record["weight"])}
+            {"node": dict(record["m"]), "weight": float(record["weight"])}
             for record in result
         ]
 
