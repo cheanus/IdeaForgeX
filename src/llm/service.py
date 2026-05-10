@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from typing import Any, Callable
 
+import openai
+
 from src.llm.client import ChatClient
 
 
@@ -20,7 +22,7 @@ def call_with_retry(
         try:
             payload = client.chat_json(messages, temperature=temperature)
             return parser(payload) if parser is not None else payload
-        except (json.JSONDecodeError, KeyError, ValueError) as exc:
+        except (json.JSONDecodeError, KeyError, ValueError, openai.APIError) as exc:
             last_error = exc
     if last_error is not None:
         raise last_error

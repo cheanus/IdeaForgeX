@@ -15,7 +15,7 @@ PARADIGMS = [
     "双面思维：同时持有矛盾，超越对立",
 ]
 
-_JSON_NODE_FORMAT = "每个元素：id, 核心描述, 向量, 粒度(可选), 前提条件(可选), 操作步骤(可选), 已知实例(可选)"
+_JSON_NODE_FORMAT = "每个元素：id, 核心描述, 向量, 粒度(可选, 整数 0-5: 0=抽象范式, 1=通用方法, 2=算法策略, 3=技术实现, 4=工程细节, 5=具体实例), 前提条件(可选), 操作步骤(可选), 已知实例(可选)"
 _JSON_QUESTION_FORMAT = (
     "每个元素：id, 核心描述, 向量, 问题类型(可选), 当前现状(可选), 未解决部分(可选)"
 )
@@ -29,7 +29,9 @@ def _format_retrieved_nodes(nodes: list[dict[str, Any]]) -> str:
         return ""
     lines: list[str] = []
     for item in nodes:
-        n = item["node"]
+        n = item.get("node", {})
+        if not n:
+            continue
         score = item.get("score", 0)
         node_id = n.get("id", "")
         desc = n.get("核心描述") or n.get("core", "")

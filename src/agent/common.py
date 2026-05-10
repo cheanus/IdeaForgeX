@@ -42,19 +42,38 @@ def _coerce_list_of_dicts(value: Any) -> list[dict[str, Any]]:
     return []
 
 
+def _coerce_granularity(value: Any) -> int:
+    """将 LLM 返回的粒度值强制转为整数，非法值回退到 0。"""
+    if value is None:
+        return 0
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            return 0
+    return 0
+
+
 def parse_llm_a_candidate(payload: dict[str, Any]) -> LLMACandidate:
     inspiration_nodes = []
     for item in _coerce_records(payload.get("inspiration_nodes", [])):
+        granularity_input = (
+            item.get("粒度")
+            if item.get("粒度") is not None
+            else item.get("granularity", 0)
+        )
         inspiration_nodes.append(
             {
                 "id": str(item.get("id", "")),
                 "核心描述": item.get("核心描述") or item.get("content", ""),
                 "向量": item.get("向量") or item.get("embedding", []),
-                "粒度": (
-                    item.get("粒度")
-                    if item.get("粒度") is not None
-                    else item.get("granularity", 0)
-                ),
+                "粒度": _coerce_granularity(granularity_input),
                 "前提条件": item.get("前提条件", ""),
                 "操作步骤": item.get("操作步骤", ""),
                 "已知实例": item.get("已知实例", ""),

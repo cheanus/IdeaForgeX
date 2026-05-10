@@ -164,6 +164,9 @@ def resolve_paper_spec(config: Config, spec: str) -> dict[str, Any]:
         except Exception:
             pass
 
+    if not text.strip():
+        raise ValueError(f"无法解析论文 '{spec}'：所有数据源均失败，未能获取论文内容")
+
     return {
         "paper_id": paper_id,
         "title": title or spec,

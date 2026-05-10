@@ -54,8 +54,8 @@ uv run python main.py bootstrap
 
 Usage:
 ```
-uv run python main.py train <paper_id>
-uv run python main.py infer <paper_id>
+uv run python main.py train <paper_id/keyword>
+uv run python main.py infer <paper_id/keyword>
 ```
 
 Example:
