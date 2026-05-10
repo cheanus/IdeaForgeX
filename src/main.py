@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 
 from src.agent.inference import build_inference_graph, run_inference
 from src.agent.training import build_training_graph, run_training
@@ -10,6 +11,8 @@ from src.config import load_config
 from src.llm.client import ChatClient
 from src.neo4j.client import create_client
 from src.neo4j.schema import ensure_schema, reset_practice_graph
+
+_logger = logging.getLogger("ideaforgex")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -37,17 +40,22 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
     config = load_config()
+    logging.basicConfig(
+        level=getattr(logging, config.log_level, logging.WARNING),
+        format="%(levelname)-7s  %(message)s",
+    )
+
     neo4j_client = create_client(config)
     llm_client = ChatClient(config)
 
     try:
         if args.command == "bootstrap":
             ensure_schema(neo4j_client)
-            print("已完成 schema 初始化")
+            _logger.info("已完成 schema 初始化")
             return
         if args.command == "reset":
             reset_practice_graph(neo4j_client)
-            print("已清空实践库")
+            _logger.info("已清空实践库")
             return
         if args.command == "train":
             graph = build_training_graph(config, llm_client, neo4j_client)
@@ -60,7 +68,7 @@ def main() -> None:
             print(result)
             return
         if args.command == "stats":
-            print("stats 功能待接入")
+            _logger.warning("stats 功能待接入")
     finally:
         neo4j_client.close()
 

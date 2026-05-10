@@ -46,6 +46,7 @@ class Config(BaseSettings):
     score_decay: float = Field(default=0.7)
     final_k: int = Field(default=20)
     arxiv_short_abstract_threshold: int = Field(default=200)
+    log_level: str = Field(default="WARNING")
 
 
 def load_config(config_file: str | Path | None = None) -> Config:
