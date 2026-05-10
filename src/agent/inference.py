@@ -67,7 +67,9 @@ def build_inference_graph(
         )
 
         # 用真实 embedding 替换 LLM 虚构的向量
-        all_descs = [n.核心描述 for n in payload.inspiration_nodes] + [q.核心描述 for q in payload.question_nodes]
+        all_descs = [n.核心描述 for n in payload.inspiration_nodes] + [
+            q.核心描述 for q in payload.question_nodes
+        ]
         if all_descs:
             real_embeddings = client.embed(all_descs)
             insp_count = len(payload.inspiration_nodes)

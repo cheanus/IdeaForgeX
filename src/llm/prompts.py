@@ -16,9 +16,7 @@ PARADIGMS = [
 ]
 
 _JSON_NODE_FORMAT = "每个元素：id, 核心描述, 向量(留空[]即可，系统自动生成), 粒度(可选, 整数 1-3: 1=抽象范式, 2=通用方法, 3=技术实现), 前提条件(可选), 操作步骤(可选), 已知实例(可选)"
-_JSON_QUESTION_FORMAT = (
-    "每个元素：id, 核心描述, 向量(留空[]即可，系统自动生成), 问题类型(可选), 当前现状(可选), 未解决部分(可选)"
-)
+_JSON_QUESTION_FORMAT = "每个元素：id, 核心描述, 向量(留空[]即可，系统自动生成), 问题类型(可选), 当前现状(可选), 未解决部分(可选)"
 _JSON_EDGE_FORMAT = (
     "rel_type 必须为：INSP_REFINES, INSP_COMBINES, INSP_QUESTION, QUESTION_COMBINES。"
     "INSP_REFINES 必须从粒度 N 指向 N+1（N 为 1 或 2），不可跳跃"
