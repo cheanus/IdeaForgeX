@@ -50,7 +50,7 @@ class Config(BaseSettings):
 
 
 def load_config(config_file: str | Path | None = None) -> Config:
-    """加载配置，允许显式指定 yaml 文件。"""
+    """加载配置，允许显式指定 yaml 文件，LOG_LEVEL 环境变量优先于 yaml。"""
 
     path = Path(config_file or "config.yaml")
     yaml_data: dict[str, Any] = {}
@@ -59,4 +59,12 @@ def load_config(config_file: str | Path | None = None) -> Config:
             loaded = yaml.safe_load(handle) or {}
             if isinstance(loaded, dict):
                 yaml_data = loaded
+
+    # LOG_LEVEL 环境变量覆盖 yaml 中的 log_level
+    import os
+
+    env_log_level = os.environ.get("LOG_LEVEL")
+    if env_log_level is not None:
+        yaml_data["log_level"] = env_log_level
+
     return Config(config_file=path, **yaml_data)  # type: ignore[reportArgumentType]

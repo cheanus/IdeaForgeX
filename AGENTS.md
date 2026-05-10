@@ -45,6 +45,30 @@ uv run pytest -v
 
 所有参数来自 `src/config.py` 的 `Config`（`pydantic-settings`，读取一个统一的 yaml 配置文件）。不要在代码中硬编码值。
 
+### 日志与调试
+
+日志统一使用 `logging.getLogger("ideaforgex")`，在 `src/main.py` 入口处通过 `logging.basicConfig` 初始化。
+
+| 配置项 | 说明 |
+|---|---|
+| `config.yaml` → `log_level` | 全局日志级别，默认 `WARNING` |
+| 环境变量 `LOG_LEVEL` | 运行时覆盖，优先级高于 yaml |
+
+```bash
+# 开发调试：显示详细日志
+LOG_LEVEL=DEBUG uv run python main.py train 1706.03762
+
+# 仅看关键信息
+LOG_LEVEL=INFO uv run python main.py bootstrap
+
+# 生产默认（无状态消息）
+uv run python main.py train 1706.03762
+```
+
+级别对照：`DEBUG`（所有细节）→ `INFO`（状态消息）→ `WARNING`（异常降级等）→ `ERROR`（仅致命错误）。
+
+注意：`print()` 仅用于 train/infer 的产品输出（stdout），状态消息和异常通过 logger 输出到 stderr。
+
 ### 依赖管理
 
 用 `uv`，不用 pip。新增依赖：`uv add <pkg>`，确保 `pyproject.toml` 同步。
