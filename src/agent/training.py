@@ -60,7 +60,7 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
             client,
             messages,
             max_retries=config.max_retries,
-            temperature=config.temperature_llm_a_judge,
+            temperature=config.llm_temperature,
             parser=parse_query_text,
         )
         return {"query_text": result["query_text"]}
@@ -81,7 +81,7 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
             client,
             messages,
             max_retries=config.max_retries,
-            temperature=config.temperature_llm_a_judge,
+            temperature=config.llm_temperature,
             parser=parse_llm_a_candidate,
         )
         return {

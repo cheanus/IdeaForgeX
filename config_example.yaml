@@ -4,7 +4,7 @@ llm_api_key: ""
 llm_model_name: "gpt-4o-mini"
 llm_json_mode: true         # false=不传 response_format，兼容不支持 JSON 模式的 LLM
 llm_thinking_enabled: true  # true=添加 extra_body 思考模式
-temperature_llm_a_judge: 0.1
+llm_temperature: 1.0
 max_retries: 3
 
 # ── Embedding ──

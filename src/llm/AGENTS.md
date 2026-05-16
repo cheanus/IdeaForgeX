@@ -97,8 +97,8 @@ RetryPolicy 在 LangGraph 层也配置了。`call_with_retry` 是函数级兜底
 
 | 场景 | temperature | 配置键 |
 |---|---|---|
-| LLM A 检索查询提炼 | 0.1（确定性） | `temperature_llm_a_judge` |
-| LLM A 判断/生成 | 0.1（确定性） | `temperature_llm_a_judge` |
+| LLM A 检索查询提炼 | 1.0 | `llm_temperature` |
+| LLM A 判断/生成 | 1.0 | `llm_temperature` |
 
 所有值通过 `config.py` 可配置，不在 prompt 里硬编码。
 

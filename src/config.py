@@ -29,7 +29,7 @@ class Config(BaseSettings):
     embedding_api_key: str = Field(default="")
     embedding_model_name: str = Field(default="text-embedding-3-small")
     embedding_dim: int = Field(default=1536)
-    temperature_llm_a_judge: float = Field(default=0.1)
+    llm_temperature: float = Field(default=1.0)
     llm_json_mode: bool = Field(default=True)
     llm_thinking_enabled: bool = Field(default=False)
     max_retries: int = Field(default=3)
