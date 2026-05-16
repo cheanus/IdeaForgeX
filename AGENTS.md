@@ -80,6 +80,7 @@ uv run python main.py train 1706.03762
 
 - 良好的函数/类以及模块划分，单一职责原则。
 - 完善又精炼的 docstring 和注释，尤其是复杂逻辑。
+- 不主动 git add 和 commit，仅在用户明确提交时才执行。
 
 ## 文档维护
 
