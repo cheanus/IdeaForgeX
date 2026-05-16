@@ -30,12 +30,23 @@ def test_load_paper_record_resolves_arxiv_id_directly(monkeypatch):
     assert result["text"] == ATTENTION_ABSTRACT[:500]
 
 
-def test_load_paper_record_falls_back_to_arxiv_when_aminer_fails(monkeypatch):
-    """标题输入下 AMiner 失败时降级到 arXiv 搜索。"""
+def test_arxiv_title_search_succeeds_skips_aminer(monkeypatch):
+    """arXiv 标题搜索优先，命中后不再调用 AMiner。"""
     config = Config(arxiv_short_abstract_threshold=200)
-    monkeypatch.setattr(
-        "src.paper.resolver.AMinerClient", FakeAMinerClient(config, should_fail=True)
-    )
+
+    call_log: list[str] = []
+
+    class SpyAMinerClient:
+        def __init__(self, c):
+            call_log.append("AMiner.__init__")
+
+        def search_papers(self, query, limit=50):
+            call_log.append("AMiner.search_papers")
+
+        def get_paper_detail(self, paper_id):
+            call_log.append("AMiner.get_paper_detail")
+
+    monkeypatch.setattr("src.paper.resolver.AMinerClient", SpyAMinerClient)
     monkeypatch.setattr("src.paper.resolver.ArxivExtractor", FakeArxivExtractor)
 
     result = load_paper_record(config, "Attention Is All You Need")
@@ -43,6 +54,22 @@ def test_load_paper_record_falls_back_to_arxiv_when_aminer_fails(monkeypatch):
     assert result["title"] == ATTENTION_TITLE
     assert result["paper_id"] == TEST_ARXIV_ID
     assert result["text"] == ATTENTION_ABSTRACT
+    assert call_log == []  # AMiner 从未被调用
+
+
+def test_load_paper_record_falls_back_to_aminer_when_arxiv_fails(monkeypatch):
+    """arXiv 标题搜索无结果时降级到 AMiner 语义搜索。"""
+    config = Config(arxiv_short_abstract_threshold=200)
+    monkeypatch.setattr(
+        "src.paper.resolver._try_arxiv_fallback", lambda c, t: None
+    )
+    monkeypatch.setattr("src.paper.resolver.AMinerClient", FakeAMinerClient)
+
+    result = load_paper_record(config, "Attention Is All You Need")
+
+    assert result["title"] == ATTENTION_TITLE
+    assert result["paper_id"] == TEST_ARXIV_ID
+    assert result["text"] == "short abstract"
 
 
 @pytest.mark.neo4j
@@ -72,42 +99,6 @@ def test_build_practice_summary_renders_existing_nodes(neo4j_client):
 
     assert "i1: desc (粒度 1)" in summary
     assert "q1: question (理论缺口)" in summary
-
-
-def test_load_paper_record_falls_back_to_arxiv_when_detail_fails(monkeypatch):
-    """标题输入下 AMiner ID 查询和搜索均失败时降级到 arXiv。"""
-    config = Config(arxiv_short_abstract_threshold=200)
-
-    class FailingAMinerClient:
-        def __init__(self, config):
-            self.config = config
-
-        def search_papers(self, query: str, limit: int = 50):
-            raise httpx.HTTPStatusError(
-                "boom",
-                request=httpx.Request("GET", "https://example.test"),
-                response=httpx.Response(
-                    500, request=httpx.Request("GET", "https://example.test")
-                ),
-            )
-
-        def get_paper_detail(self, paper_id: str):
-            raise httpx.HTTPStatusError(
-                "boom",
-                request=httpx.Request("GET", "https://example.test"),
-                response=httpx.Response(
-                    500, request=httpx.Request("GET", "https://example.test")
-                ),
-            )
-
-    monkeypatch.setattr("src.paper.resolver.AMinerClient", FailingAMinerClient)
-    monkeypatch.setattr("src.paper.resolver.ArxivExtractor", FakeArxivExtractor)
-
-    result = load_paper_record(config, "Attention Is All You Need")
-
-    assert result["title"] == ATTENTION_TITLE
-    assert result["paper_id"] == TEST_ARXIV_ID
-    assert result["text"] == ATTENTION_ABSTRACT
 
 
 def test_arxiv_extractor_reads_metadata_and_pdf_text(monkeypatch):

@@ -55,7 +55,7 @@ Neo4j 异构图，存储 Inspiration 和 Question 两种节点及四种边。向
 flowchart TD
     S["START"]
     S --> D["AMiner paper_qa_search: 按主题发现论文列表"]
-    D --> P1["逐篇: 加载论文内容<br/>AMiner → arXiv 降级"]
+    D --> P1["逐篇: 加载论文内容<br/>arXiv → AMiner 降级"]
     P1 --> GEN["LLM 提炼检索查询文本"]
     GEN --> RET["5 阶段图检索遍历"]
     RET --> A1{"LLM A: 基于论文 + 检索结果 + 实践库<br/>判断已有节点修改/新增"}
