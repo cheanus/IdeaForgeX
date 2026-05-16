@@ -18,7 +18,7 @@ class AMinerClient:
     def headers(self) -> dict[str, str]:
         return {
             "Authorization": self.config.aminer_api_key,
-            "X-Platform": "ideaforgex",
+            "X-Platform": "openclaw",
             "Content-Type": "application/json;charset=utf-8",
         }
 
@@ -30,7 +30,7 @@ class AMinerClient:
         response = httpx.post(
             f"{self.base_url}/api/paper/qa/search",
             headers=self.headers,
-            json={"query": query, "size": limit, "sci_flag": True},
+            json={"use_topic": False, "query": query, "size": limit, "sci_flag": True},
             timeout=30.0,
         )
         response.raise_for_status()

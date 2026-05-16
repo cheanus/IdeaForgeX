@@ -23,7 +23,7 @@ class ArxivExtractor:
     def get_paper_detail(self, arxiv_id: str) -> dict[str, Any]:
         response = httpx.get(
             self.config.arxiv_api_url,
-            params={"search_query": f"id:{arxiv_id}", "max_results": 1},
+            params={"id_list": arxiv_id, "max_results": 1},
             timeout=30.0,
         )
         response.raise_for_status()

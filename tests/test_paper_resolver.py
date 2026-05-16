@@ -60,9 +60,7 @@ def test_arxiv_title_search_succeeds_skips_aminer(monkeypatch):
 def test_resolve_paper_spec_falls_back_to_aminer_when_arxiv_fails(monkeypatch):
     """arXiv 标题搜索无结果时降级到 AMiner 语义搜索。"""
     config = Config(arxiv_short_abstract_threshold=200)
-    monkeypatch.setattr(
-        "src.paper.resolver._try_arxiv_fallback", lambda c, t: None
-    )
+    monkeypatch.setattr("src.paper.resolver._try_arxiv_fallback", lambda c, t: None)
     monkeypatch.setattr("src.paper.resolver.AMinerClient", FakeAMinerClient)
 
     result = resolve_paper_spec(config, "Attention Is All You Need")

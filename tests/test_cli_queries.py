@@ -86,8 +86,10 @@ def _make_fake_neo4j_session(single_result: dict | None):
 
 def _make_fake_neo4j_client_ctx(session):
     """构建兼容 'with client.session() as session:' 的 mock client。"""
+
     def _session_ctx():
         return MagicMock(__enter__=lambda s: session, __exit__=lambda *a: None)
+
     return _session_ctx
 
 
@@ -109,7 +111,12 @@ def test_cmd_retrieve_format(monkeypatch):
         if node.get("type") == "Question":
             return []
         return [
-            {"id": n["id"], "granularity": n["粒度"], "core_description": n["核心描述"], "direction": d}
+            {
+                "id": n["id"],
+                "granularity": n["粒度"],
+                "core_description": n["核心描述"],
+                "direction": d,
+            }
             for n, d in zip(FAKE_CHAIN_INSP, ["coarser", "self", "finer"])
         ]
 
@@ -176,7 +183,12 @@ def test_cmd_inspect_inspiration_node(monkeypatch):
     monkeypatch.setattr(
         "src.cli.queries._build_chain",
         lambda node, client: [
-            {"id": n["id"], "granularity": n["粒度"], "core_description": n["核心描述"], "direction": d}
+            {
+                "id": n["id"],
+                "granularity": n["粒度"],
+                "core_description": n["核心描述"],
+                "direction": d,
+            }
             for n, d in zip(FAKE_CHAIN_INSP, ["coarser", "self", "finer"])
         ],
     )
@@ -229,7 +241,12 @@ def test_cmd_inspect_edges_expanded(monkeypatch):
     monkeypatch.setattr(
         "src.cli.queries._build_chain",
         lambda node, client: [
-            {"id": n["id"], "granularity": n["粒度"], "core_description": n["核心描述"], "direction": d}
+            {
+                "id": n["id"],
+                "granularity": n["粒度"],
+                "core_description": n["核心描述"],
+                "direction": d,
+            }
             for n, d in zip(FAKE_CHAIN_INSP, ["coarser", "self", "finer"])
         ],
     )
@@ -277,7 +294,12 @@ def test_cmd_inspect_comma_separated_ids(monkeypatch):
     def fake_build_chain(node, client):
         if node.get("type") == "Inspiration":
             return [
-                {"id": n["id"], "granularity": n["粒度"], "core_description": n["核心描述"], "direction": d}
+                {
+                    "id": n["id"],
+                    "granularity": n["粒度"],
+                    "core_description": n["核心描述"],
+                    "direction": d,
+                }
                 for n, d in zip(FAKE_CHAIN_INSP, ["coarser", "self", "finer"])
             ]
         return []
