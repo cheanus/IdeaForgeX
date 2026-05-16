@@ -55,6 +55,3 @@ class AMinerClient:
         )
         response.raise_for_status()
         return response.json().get("data", {})
-
-    def dedup_search(self, idea_text: str, limit: int = 5) -> list[dict[str, Any]]:
-        return self.search_papers(idea_text, limit=limit)

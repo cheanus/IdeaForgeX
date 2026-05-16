@@ -4,7 +4,7 @@
 
 | API | 职责 | 认证 | 成本 |
 |---|---|---|---|
-| AMiner | 论文发现 + 摘要获取 + 查重 | `AMINER_API_KEY` | ¥0.05~0.10/批 |
+| AMiner | 论文发现 + 摘要获取 | `AMINER_API_KEY` | ¥0.05~0.10/批 |
 | arXiv | 全文获取（备选） | 免费，无需认证 | 免费 |
 
 ## AMiner 客户端
@@ -51,12 +51,6 @@ class AMinerClient:
             headers=self.headers
         )
         return resp.json()["data"]
-
-    # ── 查重 ──
-
-    def dedup_search(self, idea_text: str, limit: int = 5) -> list[dict]:
-        """用创新点描述搜索已有论文"""
-        return self.search_papers(idea_text, limit=limit)
 ```
 
 ### 成本控制
@@ -66,7 +60,6 @@ class AMinerClient:
 | 按主题发现论文 | `paper_qa_search` | ¥0.05 | 训练阶段，每批一次 |
 | 批量获取摘要 | `paper_info` | **免费** | 训练阶段，每批一次 |
 | 单篇详细元数据 | `paper_detail` | ¥0.01 | 按需，仅目标论文 |
-| 文献查重 | `paper_qa_search` | ¥0.05 | 推理阶段，每次 1~2 次 |
 
 > `paper_info` 是免费批量 API，返回 `abstract_slice`。训练流程主路径用它。仅当摘要不足需要完整 abstract/authors/keywords 时才降级到 `paper_detail`。
 

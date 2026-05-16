@@ -148,15 +148,6 @@ def resolve_paper_spec(config: Config, spec: str) -> dict[str, Any]:
     }
 
 
-def load_paper_record(config: Config, paper_spec: str) -> dict[str, Any]:
-    """优先读 AMiner，失败时降级到 arXiv。
-
-    保留此函数以兼容旧调用方，内部委托给 resolve_paper_spec()。
-    """
-
-    return resolve_paper_spec(config, paper_spec)
-
-
 def build_practice_summary(client: Neo4jClient, limit: int = 12) -> str:
     """汇总当前实践库，供 LLM A 判断。"""
 

@@ -7,7 +7,7 @@ import pytest
 from src.config import Config
 from src.models import InspirationNode, QuestionNode
 from src.paper.extractor import ArxivExtractor
-from src.paper.resolver import build_practice_summary, load_paper_record
+from src.paper.resolver import build_practice_summary, resolve_paper_spec
 from src.neo4j.schema import create_inspiration, create_question
 from tests.fakes import (
     ATTENTION_ABSTRACT,
@@ -18,12 +18,12 @@ from tests.fakes import (
 )
 
 
-def test_load_paper_record_resolves_arxiv_id_directly(monkeypatch):
+def test_resolve_paper_spec_resolves_arxiv_id_directly(monkeypatch):
     """arXiv ID 格式应直接走 arXiv 路径，不经过 AMiner。"""
     config = Config(arxiv_short_abstract_threshold=200)
     monkeypatch.setattr("src.paper.resolver.ArxivExtractor", FakeArxivExtractor)
 
-    result = load_paper_record(config, "1706.03762")
+    result = resolve_paper_spec(config, "1706.03762")
 
     assert result["paper_id"] == "1706.03762"
     assert result["title"] == ATTENTION_TITLE
@@ -49,7 +49,7 @@ def test_arxiv_title_search_succeeds_skips_aminer(monkeypatch):
     monkeypatch.setattr("src.paper.resolver.AMinerClient", SpyAMinerClient)
     monkeypatch.setattr("src.paper.resolver.ArxivExtractor", FakeArxivExtractor)
 
-    result = load_paper_record(config, "Attention Is All You Need")
+    result = resolve_paper_spec(config, "Attention Is All You Need")
 
     assert result["title"] == ATTENTION_TITLE
     assert result["paper_id"] == TEST_ARXIV_ID
@@ -57,7 +57,7 @@ def test_arxiv_title_search_succeeds_skips_aminer(monkeypatch):
     assert call_log == []  # AMiner 从未被调用
 
 
-def test_load_paper_record_falls_back_to_aminer_when_arxiv_fails(monkeypatch):
+def test_resolve_paper_spec_falls_back_to_aminer_when_arxiv_fails(monkeypatch):
     """arXiv 标题搜索无结果时降级到 AMiner 语义搜索。"""
     config = Config(arxiv_short_abstract_threshold=200)
     monkeypatch.setattr(
@@ -65,7 +65,7 @@ def test_load_paper_record_falls_back_to_aminer_when_arxiv_fails(monkeypatch):
     )
     monkeypatch.setattr("src.paper.resolver.AMinerClient", FakeAMinerClient)
 
-    result = load_paper_record(config, "Attention Is All You Need")
+    result = resolve_paper_spec(config, "Attention Is All You Need")
 
     assert result["title"] == ATTENTION_TITLE
     assert result["paper_id"] == TEST_ARXIV_ID

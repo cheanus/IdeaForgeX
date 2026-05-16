@@ -23,7 +23,7 @@ from src.models import Edge, InspirationNode, NodeUpdate, QuestionNode
 from src.neo4j.client import Neo4jClient
 from src.neo4j.retrieval import retrieve_with_traversal
 from src.neo4j.schema import batch_update, batch_write
-from src.paper.resolver import build_practice_summary, load_paper_record
+from src.paper.resolver import build_practice_summary, resolve_paper_spec
 
 
 class TrainingState(TypedDict, total=False):
@@ -47,7 +47,7 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
         if paper_text:
             return {}
         paper_id = state["paper_id"]  # type: ignore[reportTypedDictNotRequiredAccess]
-        record = load_paper_record(config, paper_id)
+        record = resolve_paper_spec(config, paper_id)
         return {
             "paper_id": record["paper_id"],
             "paper_title": record["title"],
