@@ -21,13 +21,15 @@ class ChatClient:
         )
         self.llm_model_name = config.llm_model_name
         self.embedding_model_name = config.embedding_model_name
+        self._json_mode = config.llm_json_mode
+        self._thinking_enabled = config.llm_thinking_enabled
 
-    def chat(
+    def _build_kwargs(
         self,
         messages: list[dict[str, str]],
-        response_format: dict[str, Any] | None = None,
-        temperature: float = 0.7,
-    ) -> str:
+        temperature: float,
+        response_format: dict[str, Any] | None,
+    ) -> dict[str, Any]:
         kwargs: dict[str, Any] = {
             "model": self.llm_model_name,
             "messages": messages,
@@ -35,6 +37,17 @@ class ChatClient:
         }
         if response_format is not None:
             kwargs["response_format"] = response_format
+        if self._thinking_enabled:
+            kwargs["extra_body"] = {"thinking": {"type": "enabled"}}
+        return kwargs
+
+    def chat(
+        self,
+        messages: list[dict[str, str]],
+        response_format: dict[str, Any] | None = None,
+        temperature: float = 0.7,
+    ) -> str:
+        kwargs = self._build_kwargs(messages, temperature, response_format)
         response = self.chat_client.chat.completions.create(**kwargs)
         content = response.choices[0].message.content or ""
         return content
@@ -42,8 +55,9 @@ class ChatClient:
     def chat_json(
         self, messages: list[dict[str, str]], temperature: float = 0.3
     ) -> dict[str, Any]:
+        response_format = {"type": "json_object"} if self._json_mode else None
         raw = self.chat(
-            messages, response_format={"type": "json_object"}, temperature=temperature
+            messages, response_format=response_format, temperature=temperature
         )
         return json.loads(raw)
 

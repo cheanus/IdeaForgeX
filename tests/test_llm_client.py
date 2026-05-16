@@ -11,7 +11,7 @@ class DummyCompletions:
     def create(self, **kwargs):
         self.calls.append(kwargs)
         return SimpleNamespace(
-            choices=[SimpleNamespace(message=SimpleNamespace(content="ok"))]
+            choices=[SimpleNamespace(message=SimpleNamespace(content="{}"))]
         )
 
 
@@ -58,7 +58,7 @@ def test_chat_client_uses_distinct_clients_for_llm_and_embedding(monkeypatch):
     assert created_clients[1].base_url == "https://embed.example/v1"
     assert created_clients[1].api_key == "embed-key"
 
-    assert client.chat([{"role": "user", "content": "hi"}]) == "ok"
+    assert client.chat([{"role": "user", "content": "hi"}]) == "{}"
     assert client.embed(["abc"]) == [[1.0, 2.0, 3.0]]
 
     assert created_clients[0].chat.completions.calls[0]["model"] == "llm-model"
@@ -80,3 +80,55 @@ def test_chat_client_exposes_new_model_field_names(monkeypatch):
 
     assert client.llm_model_name == "llm-model"
     assert client.embedding_model_name == "embed-model"
+
+
+def test_chat_json_skips_response_format_when_json_mode_disabled(monkeypatch):
+    monkeypatch.setattr("src.llm.client.OpenAI", DummyOpenAI)
+
+    config = Config(llm_json_mode=False)
+    client = ChatClient(config)
+
+    dummy: DummyOpenAI = client.chat_client  # type: ignore[reportAssignmentType]
+    client.chat_json([{"role": "user", "content": "x"}])
+
+    call_kwargs = dummy.chat.completions.calls[0]
+    assert "response_format" not in call_kwargs
+
+
+def test_chat_json_includes_response_format_when_json_mode_enabled(monkeypatch):
+    monkeypatch.setattr("src.llm.client.OpenAI", DummyOpenAI)
+
+    config = Config(llm_json_mode=True)
+    client = ChatClient(config)
+
+    dummy: DummyOpenAI = client.chat_client  # type: ignore[reportAssignmentType]
+    client.chat_json([{"role": "user", "content": "x"}])
+
+    call_kwargs = dummy.chat.completions.calls[0]
+    assert call_kwargs.get("response_format") == {"type": "json_object"}
+
+
+def test_chat_includes_thinking_extra_body_when_enabled(monkeypatch):
+    monkeypatch.setattr("src.llm.client.OpenAI", DummyOpenAI)
+
+    config = Config(llm_thinking_enabled=True)
+    client = ChatClient(config)
+
+    dummy: DummyOpenAI = client.chat_client  # type: ignore[reportAssignmentType]
+    client.chat([{"role": "user", "content": "x"}])
+
+    call_kwargs = dummy.chat.completions.calls[0]
+    assert call_kwargs.get("extra_body") == {"thinking": {"type": "enabled"}}
+
+
+def test_chat_omits_thinking_extra_body_when_disabled(monkeypatch):
+    monkeypatch.setattr("src.llm.client.OpenAI", DummyOpenAI)
+
+    config = Config(llm_thinking_enabled=False)
+    client = ChatClient(config)
+
+    dummy: DummyOpenAI = client.chat_client  # type: ignore[reportAssignmentType]
+    client.chat([{"role": "user", "content": "x"}])
+
+    call_kwargs = dummy.chat.completions.calls[0]
+    assert "extra_body" not in call_kwargs

@@ -114,10 +114,6 @@ Key fields include:
 - If validation fails, the workflow retries according to the configured policy.
 - The `retrieve` and `inspect` CLI commands are stateless; all orchestration is done by external agents.
 
-## TODO
-
--[ ] **Embedding Model Change Processing:** After changing embedding model, the 'IF NOT EXISTS' of `ensure_schema` will not reconstruct the existing vector index, resulting in a mismatch between the old dimension index and the new vector. Need to add detection logic, actively `DROP` and rebuild indexes when incompatible.
-
 ## License
 
 This project is licensed under the GNU AGPLv3. See `LICENSE` for details.

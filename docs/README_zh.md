@@ -112,10 +112,6 @@ uv run pytest -q
 - 若验证失败，工作流会根据配置的重试策略重试。
 - `retrieve` 和 `inspect` CLI 命令为无状态设计，编排逻辑由外部 agent 完成。
 
-## TODO
-
-- [ ] **嵌入模型变更处理：** 变更 embedding model 后，`ensure_schema` 的 `IF NOT EXISTS` 不会重建已有向量索引，导致旧维度索引与新向量不匹配。需要加入检测逻辑，在不兼容时主动 `DROP` 并重建索引。
-
 ## 许可证
 
 本项目采用 GNU AGPLv3 许可。详见 `LICENSE`。
