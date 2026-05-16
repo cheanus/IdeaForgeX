@@ -4,17 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-PARADIGMS = [
-    "二分关联：连接两个不相关的参照系",
-    "问题重构：换一种方式表述问题",
-    "类比推理：深层因果结构迁移",
-    "约束操控：探索/组合/转换三类创造",
-    "否定翻转：否定核心假设",
-    "抽象阶梯：泛化/特化/类比三个方向",
-    "相邻可能：在可触及边界上创新",
-    "双面思维：同时持有矛盾，超越对立",
-]
-
 _JSON_NODE_FORMAT = "每个元素：id, 核心描述, 向量(留空[]即可，系统自动生成), 粒度(可选, 整数 1-3: 1=抽象范式, 2=通用方法, 3=技术实现), 前提条件(可选), 操作步骤(可选), 已知实例(可选)"
 _JSON_QUESTION_FORMAT = "每个元素：id, 核心描述, 向量(留空[]即可，系统自动生成), 问题类型(可选), 当前现状(可选), 未解决部分(可选)"
 _JSON_EDGE_FORMAT = (
@@ -95,35 +84,4 @@ def build_llm_a_judge_messages(
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
 
-def build_inference_messages(
-    paper_text: str,
-    retrieved_nodes: list[dict],
-) -> list[dict[str, str]]:
-    """推理阶段：LLM A 基于检索结果生成创新点候选。"""
-    retrieved_text = _format_retrieved_nodes(retrieved_nodes)
-    if retrieved_text:
-        retrieved_text = f"检索到的相关实践库节点：\n{retrieved_text}"
 
-    system = (
-        "你是论文创新点生成器。基于目标论文和实践库中检索到的相关方法灵感和研究问题，"
-        "提出潜在的高价值 AI 研究创新点。\n\n"
-        "请运用范式库中的认知框架，结合检索到的现有方法/问题，"
-        "生成新的灵感节点、问题节点和关系边。\n\n"
-        "输出格式（一个 JSON）：\n"
-        "  - can_infer (bool)：固定为 false\n"
-        f"  - inspiration_nodes (数组)：生成的灵感节点（代表新方法/技术）\n    {_JSON_NODE_FORMAT}\n"
-        f"  - question_nodes (数组)：生成的问题节点（代表未解决的缺口）\n    {_JSON_QUESTION_FORMAT}\n"
-        "  - edges (数组)：节点间的关系边\n"
-        "    每个元素：from_id, to_id, rel_type, weight\n"
-        f"    {_JSON_EDGE_FORMAT}\n\n"
-        "规则：\n"
-        "  - ID 可以引用检索结果中已有节点的 ID（表示与已有知识关联）\n"
-        "  - 新生成的节点 ID 不能与检索结果中的节点 ID 重复\n"
-        '  - 如果无法生成有效 JSON，返回 {"error": "原因"}'
-    )
-    user = (
-        f"目标论文：\n{paper_text}\n\n"
-        f"范式库：\n{chr(10).join(PARADIGMS)}\n\n"
-        f"{retrieved_text}\n"
-    )
-    return [{"role": "system", "content": system}, {"role": "user", "content": user}]

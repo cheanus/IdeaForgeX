@@ -23,13 +23,14 @@ V1 原型阶段。LLM / Embedding 均通过 OpenAI 兼容 API 统一接入。Neo
 ~/Codes/IdeaForgeX/
 ├── docs/                # 设计与架构文档
 ├── src/
-│   ├── main.py          # 入口
+│   ├── main.py          # CLI 入口
 │   ├── config.py        # 配置管理
 │   ├── models.py        # 数据模型
-│   ├── agent/           # LangGraph 工作流
+│   ├── agent/           # LangGraph 训练工作流
 │   ├── neo4j/           # 图数据库操作
 │   ├── llm/             # LLM 调用与 prompt
-│   └── paper/           # 论文获取与解析
+│   ├── paper/           # 论文获取与解析
+│   └── cli/             # CLI 查询命令
 └── tests/
 ```
 
@@ -64,11 +65,13 @@ flowchart TD
 
 ### 5.2 推理
 
+推理不在 IdeaForgeX 内部完成。外部 agent 调用 CLI 命令自行编排：
+
 ```
-加载论文 → 图检索 → LLM生成创新点候选
+外部 agent 加载论文 → CLI retrieve → CLI inspect → agent 调 LLM 生成创新点
 ```
 
-3 节点 StateGraph，1 次 LLM 调用，不写入 Neo4j。
+两个核心 CLI 命令：`retrieve`（广度优先检索）和 `inspect`（节点深度详情）。详见 `docs/use_cli.md`。
 
 ## 6. 检索遍历
 
@@ -78,7 +81,7 @@ flowchart TD
 
 ## 7. LLM 调用
 
-所有 LLM 调用统一通过重试机制，JSON 解析失败自动重试。训练 3 种 prompt 模板（查询生成、判断、推理生成），对应不同 parser。
+所有 LLM 调用统一通过重试机制，JSON 解析失败自动重试。训练阶段 2 种 prompt 模板（查询生成、判断生成），对应不同 parser。
 
 ## 8. 错误处理
 

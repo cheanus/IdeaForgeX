@@ -3,16 +3,21 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 
-from src.agent.inference import build_inference_graph, run_inference
 from src.agent.training import build_training_graph, run_training
+from src.cli.queries import cmd_inspect, cmd_retrieve
 from src.config import load_config
 from src.llm.client import ChatClient
 from src.neo4j.client import create_client
 from src.neo4j.schema import ensure_schema, reset_practice_graph
 
 _logger = logging.getLogger("ideaforgex")
+
+
+def _json_print(obj: object) -> None:
+    print(json.dumps(obj, ensure_ascii=False, indent=2))
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -27,9 +32,38 @@ def build_parser() -> argparse.ArgumentParser:
         "paper", help="论文 ID（arXiv ID / AMiner ID）或标题，支持多级降级解析"
     )
 
-    infer = subparsers.add_parser("infer")
-    infer.add_argument(
-        "paper", help="论文 ID（arXiv ID / AMiner ID）或标题，支持多级降级解析"
+    retrieve = subparsers.add_parser("retrieve")
+    retrieve.add_argument("query", help="查询文本（论文摘要 / 一句话想法 / 关键词）")
+    retrieve.add_argument("--top_k", type=int, default=None, help="向量命中数")
+    retrieve.add_argument(
+        "--expand_hops", type=int, default=None, help="非精化边最大扩展深度"
+    )
+    retrieve.add_argument(
+        "--max_per_node", type=int, default=None, help="每节点扩展上限"
+    )
+    retrieve.add_argument(
+        "--decay", type=float, default=None, help="分数衰减因子"
+    )
+    retrieve.add_argument(
+        "--final_limit", type=int, default=None, help="最终截断数"
+    )
+
+    inspect = subparsers.add_parser("inspect")
+    inspect.add_argument(
+        "id", help="节点 ID（支持逗号分隔多个）"
+    )
+    inspect.add_argument(
+        "--expand-edges",
+        dest="expand_edges",
+        action="store_true",
+        default=True,
+        help="是否展开边目标节点详情",
+    )
+    inspect.add_argument(
+        "--no-expand-edges",
+        dest="expand_edges",
+        action="store_false",
+        help="不展开边目标节点详情",
     )
 
     subparsers.add_parser("stats")
@@ -62,10 +96,27 @@ def main() -> None:
             result = run_training(graph, args.paper)
             print(result)
             return
-        if args.command == "infer":
-            graph = build_inference_graph(config, llm_client, neo4j_client)
-            result = run_inference(graph, args.paper)
-            print(result)
+        if args.command == "retrieve":
+            result = cmd_retrieve(
+                config,
+                llm_client,
+                neo4j_client,
+                args.query,
+                top_k=args.top_k,
+                expand_hops=args.expand_hops,
+                max_per_node=args.max_per_node,
+                decay=args.decay,
+                final_limit=args.final_limit,
+            )
+            _json_print(result)
+            return
+        if args.command == "inspect":
+            result = cmd_inspect(
+                neo4j_client,
+                args.id,
+                expand_edges=args.expand_edges,
+            )
+            _json_print(result)
             return
         if args.command == "stats":
             _logger.warning("stats 功能待接入")

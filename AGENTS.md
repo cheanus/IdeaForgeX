@@ -1,12 +1,15 @@
 # IdeaForgeX
 
-LLM 论文创新点生成系统。设计文档见 `docs/`：
+AI 论文创新点知识图谱系统。训练时通过 LLM 从论文中提炼方法灵感和研究问题，写入 Neo4j 知识图谱；推理时外部 agent 通过 CLI 检索图数据，自行编排创新点生成。
+
+设计文档见 `docs/`：
 
 | 文件 | 内容 |
 |---|---|
-| `doc/design.md` | 完整设计：节点、边、遍历、训练/推理流程 |
-| `doc/architecture.md` | 技术架构：模块职责、LangGraph 工作流、检索算法伪代码 |
-| `doc/data-model.md` | Neo4j 图模型：约束、索引、可执行 Cypher |
+| `docs/design.md` | 完整设计：节点、边、遍历、训练/推理流程 |
+| `docs/architecture.md` | 技术架构：模块职责、LangGraph 工作流、检索算法 |
+| `docs/data-model.md` | Neo4j 图模型：约束、索引、可执行 Cypher |
+| `docs/use_cli.md` | CLI 命令规范：`retrieve` / `inspect` 输入输出格式 |
 
 ## 全局编码约定
 
@@ -67,7 +70,7 @@ uv run python main.py train 1706.03762
 
 级别对照：`DEBUG`（所有细节）→ `INFO`（状态消息）→ `WARNING`（异常降级等）→ `ERROR`（仅致命错误）。
 
-注意：`print()` 仅用于 train/infer 的产品输出（stdout），状态消息和异常通过 logger 输出到 stderr。
+注意：`print()` 仅用于 train/retrieve/inspect 的产品输出（stdout），状态消息和异常通过 logger 输出到 stderr。
 
 ### 依赖管理
 
@@ -86,6 +89,7 @@ uv run python main.py train 1706.03762
 - `src/neo4j/AGENTS.md` — Neo4j 操作与事务约定
 - `src/llm/AGENTS.md` — LLM 调用与 prompt 管理
 - `src/paper/AGENTS.md` — AMiner + arXiv 论文 API 约定
+- `src/cli/AGENTS.md` — CLI 查询命令约定
 
 `docs/` 只包含设计与架构文档，不包含实现细节。实现细节在各子模块的 `AGENTS.md` 中定义。
 

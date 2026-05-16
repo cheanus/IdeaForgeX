@@ -60,23 +60,6 @@ def commit_candidates(state):
             session.execute_write(batch_write, ...)              # CREATE（后新增）
 ```
 
-### 推理 (3 节点)
-
-```python
-builder = StateGraph(InferenceState)
-
-builder.add_node("load_target_paper", load_target_paper)
-builder.add_node("retrieve", retrieve)
-builder.add_node("apply_llm_a", apply_llm_a)    # LLM 调用 (RetryPolicy)
-
-builder.add_edge(START, "load_target_paper")
-builder.add_edge("load_target_paper", "retrieve")
-builder.add_edge("retrieve", "apply_llm_a")
-builder.add_edge("apply_llm_a", END)
-```
-
-推理仅返回结果，不写入 Neo4j。
-
 ## 节点编写规则
 
 - 每个节点是纯函数：`(state) -> dict`，返回需要更新的字段。
@@ -111,7 +94,6 @@ from langgraph.checkpoint.memory import MemorySaver
 ## 文件组织
 
 - `training.py`：训练 StateGraph 定义 + 节点函数
-- `inference.py`：推理 StateGraph 定义 + 节点函数
 - 共享的辅助函数放在 `src/agent/common.py`
 
 ## 测试

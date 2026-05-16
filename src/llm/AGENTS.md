@@ -47,13 +47,12 @@ class ChatClient:
 
 ## Prompt 管理
 
-`prompts.py` 为 LLM A 定义 3 种 `build_*_messages` 函数：
+`prompts.py` 为 LLM A 定义 2 种 `build_*_messages` 函数：
 
 | 函数 | 用途 | 输出格式 | 调用方 parser |
 |---|---|---|---|
 | `build_query_generation_messages` | 训练：从论文提炼检索查询 | `{"query_text": "..."}` | `parse_query_text` |
 | `build_llm_a_judge_messages` | 训练：判断 + 生成节点/边/更新 | `LLMACandidate` (含 `node_updates`) | `parse_llm_a_candidate` |
-| `build_inference_messages` | 推理：生成创新点候选 | `LLMACandidate` | `parse_llm_a_candidate` |
 
 ```python
 # 训练：检索查询提炼
@@ -65,12 +64,6 @@ def build_llm_a_judge_messages(
     paper_text: str, practice_summary: str, retrieved_nodes: list[dict]
 ) -> list[dict]:
     ...
-
-# 推理：创新点生成
-def build_inference_messages(
-    paper_text: str, retrieved_nodes: list[dict]
-) -> list[dict]:
-    ...
 ```
 
 ## System Prompt 编写规则
@@ -80,7 +73,6 @@ def build_inference_messages(
 - 包含失败处理指引：
   > 如果无法生成有效 JSON，返回 `{"error": "原因"}`。
 - `build_llm_a_judge_messages`：嵌入检索结果 + `node_updates` 字段说明 + 更新 vs 新增规则
-- `build_inference_messages`：嵌入检索结果 + 范式库，引导 LLM 基于已有知识生成新连接
 - `rel_type` 取值在 system prompt 中直接约束为枚举值，不依赖代码层兜底映射
 
 ## JSON 解析与重试
@@ -115,5 +107,5 @@ RetryPolicy 在 LangGraph 层也配置了。`call_with_retry` 是函数级兜底
 | 文件 | 职责 |
 |---|---|
 | `client.py` | `ChatClient` 封装：chat / chat_json / embed |
-| `prompts.py` | 3 种 system prompt 模板 + `build_*_messages` 函数 |
+| `prompts.py` | 2 种 system prompt 模板 + `build_*_messages` 函数 |
 | `service.py` | `call_with_retry`：JSON mode 调用 + parser 回调 + 自动重试 |
