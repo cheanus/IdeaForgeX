@@ -2,38 +2,38 @@
 
 [English](README.md) | [简体中文](docs/README_zh.md)
 
-IdeaForgeX turns research papers into structured innovation candidates with an LLM-first workflow.
-
-It reads paper text, extracts ideas into a Neo4j graph, and supports both training and inference flows for paper innovation mining.
+AI 论文创新点知识图谱系统。训练时通过 LLM 从论文中提炼方法灵感和研究问题，写入 Neo4j 知识图谱；推理时外部 agent 通过 CLI 检索图数据，自行编排创新点生成。
 
 ## What It Does
 
 - Discover and load papers from AMiner, with arXiv fallback for full text
 - Build a practice graph in Neo4j with `Inspiration` and `Question` nodes
 - Run an LLM A-only training loop to decide whether a paper can be recorded directly or needs structured candidate generation
-- Run inference with retrieval + traversal over the practice graph
+- Expose CLI search commands (`retrieve` / `inspect`) for external agents to query the knowledge graph
 - Keep the whole system testable with local Docker services
 
 ## Why It Exists
 
-Most paper-to-idea systems either stop at summaries or require too much manual curation. IdeaForgeX aims to keep the workflow structured, reproducible, and graph-backed so ideas can be reused, traced, and improved over time.
+Most paper-to-idea systems either stop at summaries or require too much manual curation. IdeaForgeX keeps the workflow structured, reproducible, and graph-backed so ideas can be reused, traced, and improved over time. The inference side is intentionally thin — just a query API — so external agents can assemble their own innovation pipelines on top.
 
 ## Highlights
 
-- Single LLM A workflow, no feedback loop noise
+- Single LLM A workflow for training, no feedback loop noise
 - Neo4j-backed knowledge graph for ideas and questions
+- CLI-only inference: `retrieve` and `inspect` commands for external agents
 - Local Docker setup for test and personal databases
 - AMiner + arXiv fallback paper loading
 - Full regression test suite
 
 ## Project Structure
 
-- `src/agent/` workflow graphs for training and inference
-- `src/llm/` prompt construction and chat client
-- `src/paper/` AMiner, arXiv, and paper loading helpers
-- `src/neo4j/` schema, maintenance, and retrieval logic
-- `tests/` regression coverage for the main flows
-- `doc/` design, architecture, and data model docs
+- `src/agent/` — LangGraph training workflow
+- `src/llm/` — prompt construction and chat client
+- `src/paper/` — AMiner, arXiv, and paper loading helpers
+- `src/neo4j/` — schema, maintenance, and retrieval logic
+- `src/cli/` — CLI query commands (`retrieve` / `inspect`)
+- `tests/` — regression coverage for the main flows
+- `docs/` — design, architecture, data model, and CLI spec docs
 
 ## Requirements
 
@@ -44,8 +44,8 @@ Most paper-to-idea systems either stop at summaries or require too much manual c
 
 ## Quick Start
 
-
 First time setup:
+
 ```bash
 docker compose up -d
 cp config_example.yaml config.yaml
@@ -53,17 +53,22 @@ uv run python main.py bootstrap
 ```
 
 Usage:
+
 ```
 uv run python main.py train <paper_id/keyword>
-uv run python main.py infer <paper_id/keyword>
+uv run python main.py retrieve <query_text>
+uv run python main.py inspect <node_id>
 ```
 
-Example:
+Examples:
 
 ```bash
 uv run python main.py train 1706.03762
-uv run python main.py infer 1706.03762
+uv run python main.py retrieve "使用扩散模型做医学图像分割的少样本学习"
+uv run python main.py inspect insp-3f2a1...
 ```
+
+CLI 命令详细规范见 `docs/use_cli.md`。
 
 ## Neo4j Targets
 
@@ -104,13 +109,14 @@ Key fields include:
 
 ## Development Notes
 
-- Training and inference are implemented as LangGraph state machines.
+- Training is implemented as a LangGraph state machine.
 - LLM output is validated through Pydantic models before any Neo4j writes.
 - If validation fails, the workflow retries according to the configured policy.
+- The `retrieve` and `inspect` CLI commands are stateless; all orchestration is done by external agents.
 
 ## TODO
 
--[ ] **Embedding Model Change Processing:** After changing embedding model, the 'IF NOT EXISTS' of' secure_schema 'will not reconstruct the existing vector index, resulting in a mismatch between the old dimension index and the new vector. Need to add detection logic, actively 'DROP' and rebuild indexes when incompatible.
+-[ ] **Embedding Model Change Processing:** After changing embedding model, the 'IF NOT EXISTS' of `ensure_schema` will not reconstruct the existing vector index, resulting in a mismatch between the old dimension index and the new vector. Need to add detection logic, actively `DROP` and rebuild indexes when incompatible.
 
 ## License
 
@@ -123,5 +129,5 @@ Issues and pull requests are welcome.
 Before opening a PR, please make sure:
 
 - `uv run pytest -q` passes
-- `bootstrap`, `train`, and `infer` work locally
+- `bootstrap`, `train`, `retrieve`, and `inspect` work locally
 - New behavior is covered by tests when practical
