@@ -104,9 +104,8 @@ def fetch_full_text(arxiv_id: str) -> str:
 
 实际训练/推理中，`resolver.py` 提供 `resolve_paper_spec()` 实现多级降级解析：
 1. arXiv ID 格式 → 直接 arXiv 查询
-2. AMiner ID 直接查询
-3. AMiner 语义搜索（按标题）
-4. arXiv 标题搜索 → 全文 PDF 降级
+2. arXiv 标题搜索 → 全文 PDF 降级
+3. AMiner 语义搜索
 
 ```python
 from src.paper.resolver import resolve_paper_spec

@@ -43,12 +43,14 @@ def _build_chain(node: dict[str, Any], client: Neo4jClient) -> list[dict[str, An
             direction = "finer"
         else:
             direction = "self"
-        chain.append({
-            "id": n["id"],
-            "granularity": g,
-            "core_description": n.get("核心描述", ""),
-            "direction": direction,
-        })
+        chain.append(
+            {
+                "id": n["id"],
+                "granularity": g,
+                "core_description": n.get("核心描述", ""),
+                "direction": direction,
+            }
+        )
     chain.sort(key=lambda c: c["granularity"])
     return chain
 
@@ -68,17 +70,17 @@ def _get_edges_batch(
         result = session.run(query, node_ids=node_ids)
         edges_by_source: dict[str, list[dict[str, Any]]] = {nid: [] for nid in node_ids}
         for record in result:
-            edges_by_source[record["source_id"]].append({
-                "type": record["rel_type"],
-                "weight": float(record["weight"]),
-                "target": dict(record["target"]),
-            })
+            edges_by_source[record["source_id"]].append(
+                {
+                    "type": record["rel_type"],
+                    "weight": float(record["weight"]),
+                    "target": dict(record["target"]),
+                }
+            )
         return edges_by_source
 
 
-def _get_edges_for_node(
-    client: Neo4jClient, node_id: str
-) -> list[dict[str, Any]]:
+def _get_edges_for_node(client: Neo4jClient, node_id: str) -> list[dict[str, Any]]:
     query = """
     MATCH (n {id: $node_id})-[r:INSP_COMBINES|INSP_QUESTION|QUESTION_COMBINES]-(m)
     RETURN type(r) AS rel_type, r.weight AS weight, m AS target
@@ -133,22 +135,26 @@ def cmd_retrieve(
         edges_out: list[dict[str, Any]] = []
         for e in raw_edges:
             tgt = e["target"]
-            edges_out.append({
-                "type": EDGE_TYPE_LABELS.get(e["type"], e["type"]),
-                "target": tgt["id"],
-                "weight": e["weight"],
-                "target_summary": tgt.get("核心描述", ""),
-            })
-        nodes.append({
-            "id": node_id,
-            "type": raw_node.get("type", ""),
-            "score": item["score"],
-            "granularity": raw_node.get("粒度"),
-            "core_description": raw_node.get("核心描述", ""),
-            "snippet": _build_snippet(raw_node),
-            "chain": chain,
-            "edges": edges_out,
-        })
+            edges_out.append(
+                {
+                    "type": EDGE_TYPE_LABELS.get(e["type"], e["type"]),
+                    "target": tgt["id"],
+                    "weight": e["weight"],
+                    "target_summary": tgt.get("核心描述", ""),
+                }
+            )
+        nodes.append(
+            {
+                "id": node_id,
+                "type": raw_node.get("type", ""),
+                "score": item["score"],
+                "granularity": raw_node.get("粒度"),
+                "core_description": raw_node.get("核心描述", ""),
+                "snippet": _build_snippet(raw_node),
+                "chain": chain,
+                "edges": edges_out,
+            }
+        )
 
     runtime_ms = int((time.monotonic() - t0) * 1000)
 
@@ -212,16 +218,20 @@ def cmd_inspect(
                     tgt_summary["granularity"] = tgt.get("粒度")
                 elif tgt_type == "Question" and tgt.get("问题类型"):
                     tgt_summary["问题类型"] = tgt["问题类型"]
-                edges_out.append({
-                    "type": EDGE_TYPE_LABELS.get(e["type"], e["type"]),
-                    "target": tgt_summary,
-                    "weight": e["weight"],
-                })
+                edges_out.append(
+                    {
+                        "type": EDGE_TYPE_LABELS.get(e["type"], e["type"]),
+                        "target": tgt_summary,
+                        "weight": e["weight"],
+                    }
+                )
 
-        results.append({
-            "node": node,
-            "chain": chain,
-            "edges": edges_out,
-        })
+        results.append(
+            {
+                "node": node,
+                "chain": chain,
+                "edges": edges_out,
+            }
+        )
 
     return results

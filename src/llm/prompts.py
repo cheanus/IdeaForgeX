@@ -82,6 +82,3 @@ def build_llm_a_judge_messages(
         f"实践库概要：\n{practice_summary}\n"
     )
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
-
-
-

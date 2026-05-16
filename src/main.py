@@ -41,17 +41,11 @@ def build_parser() -> argparse.ArgumentParser:
     retrieve.add_argument(
         "--max_per_node", type=int, default=None, help="每节点扩展上限"
     )
-    retrieve.add_argument(
-        "--decay", type=float, default=None, help="分数衰减因子"
-    )
-    retrieve.add_argument(
-        "--final_limit", type=int, default=None, help="最终截断数"
-    )
+    retrieve.add_argument("--decay", type=float, default=None, help="分数衰减因子")
+    retrieve.add_argument("--final_limit", type=int, default=None, help="最终截断数")
 
     inspect = subparsers.add_parser("inspect")
-    inspect.add_argument(
-        "id", help="节点 ID（支持逗号分隔多个）"
-    )
+    inspect.add_argument("id", help="节点 ID（支持逗号分隔多个）")
     inspect.add_argument(
         "--expand-edges",
         dest="expand_edges",

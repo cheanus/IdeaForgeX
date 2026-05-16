@@ -2,10 +2,8 @@
 
 resolve_paper_spec() 接受论文 ID 或标题，按以下优先级尝试获取数据：
 1. arXiv ID 格式 → 直接 arXiv 查询
-2. AMiner ID 直接查询
-3. AMiner 语义搜索（按标题）
-4. arXiv 标题搜索
-5. arXiv 全文 PDF 降级
+2. arXiv 标题搜索 → 全文 PDF 降级
+3. AMiner 语义搜索
 """
 
 from __future__ import annotations
@@ -47,19 +45,6 @@ def _load_from_arxiv(config: Config, arxiv_id: str) -> dict[str, Any]:
         "title": title or arxiv_id,
         "text": text,
         "paper": detail,
-    }
-
-
-def _try_aminer_direct(config: Config, spec: str) -> dict[str, Any]:
-    """尝试将 spec 作为 AMiner paper ID 直接查询。"""
-    paper = AMinerClient(config).get_paper_detail(spec)
-    title = paper.get("title", spec)
-    text = paper.get("abstract_slice") or paper.get("abstract") or ""
-    return {
-        "paper_id": paper.get("id", spec),
-        "title": title,
-        "text": text,
-        "paper": paper,
     }
 
 
@@ -109,9 +94,8 @@ def resolve_paper_spec(config: Config, spec: str) -> dict[str, Any]:
 
     优先级：
     1. arXiv ID 格式 → 直接 arXiv 查询
-    2. AMiner ID 直接查询
+    2. arXiv 标题搜索 → 全文 PDF 降级
     3. AMiner 语义搜索
-    4. arXiv 标题搜索 → 全文 PDF 降级
     """
     spec = spec.strip()
 
@@ -130,32 +114,21 @@ def resolve_paper_spec(config: Config, spec: str) -> dict[str, Any]:
     paper: dict[str, Any] = {}
     paper_id = spec
 
-    # 优先级2：AMiner ID 直接查询
+    # 优先级2：arXiv 标题搜索 + 全文降级
     try:
-        result = _try_aminer_direct(config, spec)
-        paper = result["paper"]
-        title = result["title"]
-        text = result["text"]
-        paper_id = result["paper_id"]
+        result = _try_arxiv_fallback(config, title)
+        if result:
+            paper = result["paper"]
+            title = result["title"]
+            text = result["text"]
+            paper_id = result["paper_id"]
     except Exception:
         pass
 
-    # 优先级3：AMiner 语义搜索
-    if len(text) < config.arxiv_short_abstract_threshold:
+    # 优先级3：AMiner 语义搜索（arxiv 未获取到内容时启用）
+    if not text.strip():
         try:
             result = _try_aminer_search(config, spec)
-            if result:
-                paper = result["paper"]
-                title = result["title"]
-                text = result["text"]
-                paper_id = result["paper_id"]
-        except Exception:
-            pass
-
-    # 优先级4：arXiv 标题搜索 + 全文降级
-    if len(text) < config.arxiv_short_abstract_threshold:
-        try:
-            result = _try_arxiv_fallback(config, title)
             if result:
                 paper = result["paper"]
                 title = result["title"]
