@@ -6,7 +6,6 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from xml.etree import ElementTree as ET
 
 import fitz  # pymupdf
 import httpx
@@ -22,24 +21,16 @@ class ArxivExtractor:
 
     def get_paper_detail(self, arxiv_id: str) -> dict[str, Any]:
         response = httpx.get(
-            self.config.arxiv_api_url,
-            params={"id_list": arxiv_id, "max_results": 1},
+            f"https://arxiv.org/abs/{arxiv_id}",
             timeout=30.0,
         )
         response.raise_for_status()
-        root = ET.fromstring(response.text)
-        ns = {"atom": "http://www.w3.org/2005/Atom"}
-        entry = root.find("atom:entry", ns)
-        if entry is None:
-            return {"title": arxiv_id, "abstract_slice": "", "abstract": ""}
-        title = (
-            entry.findtext("atom:title", default="", namespaces=ns) or arxiv_id
-        ).strip()
-        abstract = (
-            entry.findtext("atom:summary", default="", namespaces=ns) or ""
-        ).strip()
-        published = entry.findtext("atom:published", default="", namespaces=ns) or ""
-        year = published[:4] if len(published) >= 4 else ""
+        content = response.text
+        title = re.search(r"Title:</span>(.*?)</h1>", content, re.DOTALL)
+        title = title.group(1).strip() if title else arxiv_id
+        abstract = re.search(r"Abstract:</span>(.*?)</blockquote>", content, re.DOTALL)
+        abstract = abstract.group(1).strip() if abstract else ""
+        year = "20" + arxiv_id[:2] if re.match(r"^\d{4}\.\d{4,5}", arxiv_id) else ""
         return {
             "title": title,
             "abstract_slice": abstract[:500],

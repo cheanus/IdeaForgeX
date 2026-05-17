@@ -88,7 +88,7 @@ def main() -> None:
         if args.command == "train":
             graph = build_training_graph(config, llm_client, neo4j_client)
             result = run_training(graph, args.paper)
-            print(result)
+            _logger.info("训练完成，已生成训练图谱")
             return
         if args.command == "retrieve":
             result = cmd_retrieve(
