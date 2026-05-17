@@ -211,7 +211,8 @@ def test_training_graph_commits_node_updates(monkeypatch, neo4j_client):
             "MATCH (n:Inspiration {id: 'insp-existing'}) RETURN n.已知实例 AS ex"
         ).data()
         assert len(records) == 1
-        assert records[0]["ex"] == "new example from paper"
+        # 已知实例不再由 LLM 产出，改为代码自动追加论文元信息
+        assert records[0]["ex"] == "old example; Attention Is All You Need (2017)"
 
 
 def test_parse_query_text():
@@ -246,7 +247,7 @@ def test_parse_llm_a_candidate_maps_raw_llm_output():
     candidate = parse_llm_a_candidate(payload)
 
     assert candidate.inspiration_nodes[0].核心描述 == "desc"
-    assert candidate.inspiration_nodes[0].向量 == [0.1, 0.2]
+    assert candidate.inspiration_nodes[0].向量 == []
     assert candidate.question_nodes[0].核心描述 == "question"
     assert candidate.edges[0].from_id == "I1"
 

@@ -114,7 +114,6 @@ def update_node(tx, update: NodeUpdate) -> None:
         "粒度",
         "前提条件",
         "操作步骤",
-        "已知实例",
         "问题类型",
         "当前现状",
         "未解决部分",
@@ -137,6 +136,20 @@ def update_node(tx, update: NodeUpdate) -> None:
 def batch_update(tx, updates: list[NodeUpdate]) -> None:
     for upd in updates:
         update_node(tx, upd)
+
+
+def append_known_instance(tx, node_ids: list[str], entry: str) -> None:
+    """追加已知实例到已有节点，去重。"""
+    for node_id in node_ids:
+        tx.run(
+            """
+            MATCH (n {id: $node_id})
+            WHERE n.已知实例 IS NULL OR NOT n.已知实例 CONTAINS $entry
+            SET n.已知实例 = coalesce(n.已知实例 + '; ', '') + $entry
+            """,
+            node_id=node_id,
+            entry=entry,
+        )
 
 
 def reset_practice_graph(client: Neo4jClient) -> None:

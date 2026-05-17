@@ -22,13 +22,14 @@ from src.llm.service import call_with_retry
 from src.models import Edge, InspirationNode, NodeUpdate, QuestionNode
 from src.neo4j.client import Neo4jClient
 from src.neo4j.retrieval import retrieve_with_traversal
-from src.neo4j.schema import batch_update, batch_write
+from src.neo4j.schema import append_known_instance, batch_update, batch_write
 from src.paper.resolver import build_practice_summary, resolve_paper_spec
 
 
 class TrainingState(TypedDict, total=False):
     paper_id: str
     paper_title: str
+    paper_year: str
     paper_text: str
     query_text: str
     retrieved_nodes: list[dict]
@@ -51,6 +52,7 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
         return {
             "paper_id": record["paper_id"],
             "paper_title": record["title"],
+            "paper_year": record.get("year", ""),
             "paper_text": record["text"],
         }
 
@@ -76,6 +78,8 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
             state["paper_text"],  # type: ignore[reportTypedDictNotRequiredAccess]
             practice_summary,
             state.get("retrieved_nodes", []),
+            paper_title=state.get("paper_title", ""),  # type: ignore[reportTypedDictNotRequiredAccess]
+            paper_year=state.get("paper_year", ""),  # type: ignore[reportTypedDictNotRequiredAccess]
         )
         payload = call_with_retry(
             client,
@@ -123,7 +127,7 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
             edges, inspirations, state.get("retrieved_nodes", [])
         )
 
-        # 用真实 embedding 替换 LLM 虚构的向量，确保向量索引可用
+        # 用真实 embedding 替换向量占位符
         all_descs = [n.核心描述 for n in inspirations] + [q.核心描述 for q in questions]
         if all_descs:
             real_embeddings = client.embed(all_descs)
@@ -133,9 +137,22 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
             for j, emb in enumerate(real_embeddings[insp_count:]):
                 questions[j].向量 = emb
 
+        # 为新建灵感节点注入已知实例（当前论文即为实例）
+        paper_title = state.get("paper_title", "")
+        paper_year = state.get("paper_year", "")
+        paper_entry = f"{paper_title} ({paper_year})" if paper_year else paper_title
+        if paper_entry:
+            for n in inspirations:
+                n.已知实例 = paper_entry
+
         with neo4j_client.driver.session(database=config.neo4j_database) as session:
             if node_updates:
                 session.execute_write(batch_update, node_updates)
+                updated_node_ids = [u.node_id for u in node_updates if u.node_id]
+                if updated_node_ids and paper_entry:
+                    session.execute_write(
+                        append_known_instance, updated_node_ids, paper_entry
+                    )
             if inspirations or questions:
                 session.execute_write(batch_write, inspirations, questions, edges)
         return {}

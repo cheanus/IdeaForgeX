@@ -52,6 +52,7 @@ class FakeArxivExtractor:
         return {
             "title": ATTENTION_TITLE,
             "abstract": ATTENTION_ABSTRACT[:500],
+            "year": "2017",
         }
 
     def find_arxiv_id(self, paper: dict):

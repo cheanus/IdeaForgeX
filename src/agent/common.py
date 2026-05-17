@@ -85,11 +85,11 @@ def parse_llm_a_candidate(payload: dict[str, Any]) -> LLMACandidate:
             {
                 "id": str(item.get("id", "")),
                 "核心描述": item.get("核心描述") or item.get("content", ""),
-                "向量": item.get("向量") or item.get("embedding", []),
+                "向量": [],
                 "粒度": _coerce_granularity(granularity_input),
                 "前提条件": item.get("前提条件", ""),
                 "操作步骤": item.get("操作步骤", ""),
-                "已知实例": item.get("已知实例", ""),
+                "已知实例": "",
             }
         )
 
@@ -99,7 +99,7 @@ def parse_llm_a_candidate(payload: dict[str, Any]) -> LLMACandidate:
             {
                 "id": str(item.get("id", "")),
                 "核心描述": item.get("核心描述") or item.get("content", ""),
-                "向量": item.get("向量") or item.get("embedding", []),
+                "向量": [],
                 "问题类型": item.get("问题类型")
                 or item.get("question_type", "理论缺口"),
                 "当前现状": item.get("当前现状", ""),

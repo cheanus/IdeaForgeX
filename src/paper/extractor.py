@@ -38,7 +38,14 @@ class ArxivExtractor:
         abstract = (
             entry.findtext("atom:summary", default="", namespaces=ns) or ""
         ).strip()
-        return {"title": title, "abstract_slice": abstract[:500], "abstract": abstract}
+        published = entry.findtext("atom:published", default="", namespaces=ns) or ""
+        year = published[:4] if len(published) >= 4 else ""
+        return {
+            "title": title,
+            "abstract_slice": abstract[:500],
+            "abstract": abstract,
+            "year": year,
+        }
 
     def find_arxiv_id(self, paper: dict[str, Any]) -> str | None:
         title = paper.get("title", "")

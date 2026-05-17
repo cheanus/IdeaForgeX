@@ -40,10 +40,12 @@ def _load_from_arxiv(config: Config, arxiv_id: str) -> dict[str, Any]:
         except Exception:
             pass
 
+    year = detail.get("year", "")
     return {
         "paper_id": arxiv_id,
         "title": title or arxiv_id,
         "text": text,
+        "year": year,
         "paper": detail,
     }
 
@@ -59,7 +61,14 @@ def _try_aminer_search(config: Config, query: str) -> dict[str, Any] | None:
     paper = AMinerClient(config).get_paper_detail(best_id)
     title = paper.get("title", query)
     text = paper.get("abstract_slice") or paper.get("abstract") or ""
-    return {"paper_id": best_id, "title": title, "text": text, "paper": paper}
+    year = str(paper.get("year", ""))
+    return {
+        "paper_id": best_id,
+        "title": title,
+        "text": text,
+        "year": year,
+        "paper": paper,
+    }
 
 
 def _try_arxiv_fallback(config: Config, title: str) -> dict[str, Any] | None:
@@ -80,7 +89,14 @@ def _try_arxiv_fallback(config: Config, title: str) -> dict[str, Any] | None:
         except Exception:
             pass
 
-    return {"paper_id": arxiv_id, "title": result_title, "text": text, "paper": detail}
+    year = detail.get("year", "")
+    return {
+        "paper_id": arxiv_id,
+        "title": result_title,
+        "text": text,
+        "year": year,
+        "paper": detail,
+    }
 
 
 def _enforce_text_limit(text: str) -> str:
@@ -140,10 +156,12 @@ def resolve_paper_spec(config: Config, spec: str) -> dict[str, Any]:
     if not text.strip():
         raise ValueError(f"无法解析论文 '{spec}'：所有数据源均失败，未能获取论文内容")
 
+    year = paper.get("year", "")
     return {
         "paper_id": paper_id,
         "title": title or spec,
         "text": _enforce_text_limit(text),
+        "year": year,
         "paper": paper,
     }
 
