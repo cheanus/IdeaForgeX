@@ -88,11 +88,11 @@ def vector_search(tx, index_name: str, query_embedding: list[float], k: int):
 
 ## 节点更新
 
-LLM 可通过 `node_updates` 增量修改已有节点属性。不可更新 `id`、`核心描述`、`向量`。
+LLM 可通过 `node_updates` 增量修改已有节点属性。不可更新 `id`、`核心描述`。`已知实例` 由代码自动注入（不在 `node_updates` 可更新字段中）。
 
 ```python
 def update_node(tx, update: NodeUpdate) -> None:
-    mutable_fields = ["粒度", "前提条件", "操作步骤", "已知实例",
+    mutable_fields = ["粒度", "前提条件", "操作步骤",
                       "问题类型", "当前现状", "未解决部分"]
     set_clauses = []
     params = {"node_id": update.node_id}
@@ -111,6 +111,26 @@ def batch_update(tx, updates: list[NodeUpdate]) -> None:
 ```
 
 在 `commit_candidates` 中，`batch_update` 必须在 `batch_write` 之前执行（先更新后新增）。
+
+## 已知实例追加
+
+`已知实例` 不由 LLM 产出，由代码在 `commit_candidates` 中自动注入：
+- 新建 Inspiration 节点：设为当前论文标题和年份
+- 被 `node_updates` 更新的已有节点：通过 `append_known_instance` 去重追加
+
+```python
+def append_known_instance(tx, node_ids: list[str], entry: str) -> None:
+    for node_id in node_ids:
+        tx.run(
+            """
+            MATCH (n {id: $node_id})
+            WHERE n.已知实例 IS NULL OR NOT n.已知实例 CONTAINS $entry
+            SET n.已知实例 = coalesce(n.已知实例 + '; ', '') + $entry
+            """,
+            node_id=node_id,
+            entry=entry,
+        )
+```
 
 ## 边创建
 

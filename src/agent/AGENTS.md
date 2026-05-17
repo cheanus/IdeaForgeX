@@ -11,6 +11,7 @@ from langgraph.graph.message import add_messages
 class TrainingState(TypedDict):
     paper_id: str
     paper_title: str
+    paper_year: str
     paper_text: str
     query_text: str          # LLM 生成的检索查询
     retrieved_nodes: list    # 图检索结果 [{node, score}]

@@ -61,7 +61,11 @@ def build_query_generation_messages(paper_text: str) -> list[dict]:
 
 # 训练：判断 + 生成 + 更新
 def build_llm_a_judge_messages(
-    paper_text: str, practice_summary: str, retrieved_nodes: list[dict]
+    paper_text: str,
+    practice_summary: str,
+    retrieved_nodes: list[dict],
+    paper_title: str = "",
+    paper_year: str = "",
 ) -> list[dict]:
     ...
 ```
