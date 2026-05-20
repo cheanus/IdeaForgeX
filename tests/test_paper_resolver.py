@@ -108,12 +108,10 @@ def test_arxiv_extractor_reads_metadata_and_pdf_text(monkeypatch):
     pdf.close()
 
     def fake_get(url, params=None, timeout=None):
-        if url.endswith("api/query"):
+        if "arxiv.org/abs/" in url:
             body = (
-                "<feed xmlns='http://www.w3.org/2005/Atom'>"
-                "<entry><title>Attention Is All You Need</title>"
-                "<summary>We propose a new simple network architecture.</summary></entry>"
-                "</feed>"
+                '<h1 class="title mathjax"><span class="descriptor">Title:</span>Attention Is All You Need</h1>'
+                "Abstract:</span>We propose a new simple network architecture.</blockquote>"
             )
             return httpx.Response(200, text=body, request=httpx.Request("GET", url))
         return httpx.Response(200, content=pdf_bytes, request=httpx.Request("GET", url))
