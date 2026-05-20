@@ -15,13 +15,30 @@ class RetrievalHit:
     score: float
 
 
-def _vector_query_cypher(index_name: str, k: int) -> str:
-    return """
-        CALL db.index.vector.queryNodes($index, $k, $embedding)
-        YIELD node, score
-        RETURN node, score
-        ORDER BY score DESC
-    """
+def _vector_query_cypher(index_name: str) -> str:
+    if index_name == "idx_insp_vector":
+        return """
+            MATCH (node:Inspiration)
+            SEARCH node IN (
+                VECTOR INDEX idx_insp_vector
+                FOR $embedding
+                LIMIT $k
+            ) SCORE AS score
+            RETURN node, score
+            ORDER BY score DESC
+        """
+    if index_name == "idx_q_vector":
+        return """
+            MATCH (node:Question)
+            SEARCH node IN (
+                VECTOR INDEX idx_q_vector
+                FOR $embedding
+                LIMIT $k
+            ) SCORE AS score
+            RETURN node, score
+            ORDER BY score DESC
+        """
+    raise ValueError(f"不支持的向量索引: {index_name}")
 
 
 def vector_search(
@@ -29,8 +46,7 @@ def vector_search(
 ) -> list[RetrievalHit]:
     with client.session() as session:
         result = session.run(
-            _vector_query_cypher(index_name, k),  # type: ignore[reportArgumentType]
-            index=index_name,
+            _vector_query_cypher(index_name),  # type: ignore[reportArgumentType]
             k=k,
             embedding=query_embedding,
         )
@@ -43,7 +59,7 @@ def vector_search(
 def expand_refinement_chain(client: Neo4jClient, hit_id: str) -> list[dict[str, Any]]:
     query = """
     MATCH (hit:Inspiration {id: $hit_id})
-    CALL {
+    CALL (hit) {
         MATCH (hit)-[:INSP_REFINES*0..10]->(finer:Inspiration) RETURN finer
         UNION
         MATCH (coarser:Inspiration)-[:INSP_REFINES*0..10]->(hit) RETURN coarser AS finer
@@ -59,7 +75,8 @@ def hop_expand(
     client: Neo4jClient, node_id: str, max_neighbors: int
 ) -> list[dict[str, Any]]:
     query = """
-    MATCH (n {id: $node_id})-[r:INSP_COMBINES|INSP_QUESTION|QUESTION_COMBINES]-(m)
+    MATCH (n {id: $node_id})-[r]-(m)
+    WHERE type(r) IN ['INSP_COMBINES','INSP_QUESTION','QUESTION_COMBINES']
     RETURN m, r.weight AS weight
     ORDER BY weight DESC
     LIMIT $max_neighbors

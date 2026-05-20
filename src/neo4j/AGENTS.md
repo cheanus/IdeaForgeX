@@ -69,14 +69,41 @@ def ensure_schema(driver):
 
 ```python
 def vector_search(tx, index_name: str, query_embedding: list[float], k: int):
-    result = tx.run("""
-        CALL db.index.vector.queryNodes($index, $k, $embedding)
-        YIELD node, score
+    # SEARCH 子句不支持将索引名作为参数，按索引名分支构造查询语句
+    cypher = (
+        """
+        MATCH (node:Inspiration)
+        SEARCH node IN (
+            VECTOR INDEX idx_insp_vector
+            FOR $embedding
+            LIMIT $k
+        ) SCORE AS score
         RETURN node, score
         ORDER BY score DESC
-    """, index=index_name, k=k, embedding=query_embedding)
+        """
+        if index_name == "idx_insp_vector"
+        else
+        """
+        MATCH (node:Question)
+        SEARCH node IN (
+            VECTOR INDEX idx_q_vector
+            FOR $embedding
+            LIMIT $k
+        ) SCORE AS score
+        RETURN node, score
+        ORDER BY score DESC
+        """
+    )
+    result = tx.run(cypher, k=k, embedding=query_embedding)
     return [{"node": r["node"], "score": r["score"]} for r in result]
 ```
+
+> Neo4j 新版本中，`db.index.vector.queryNodes` 已弃用，统一使用 `SEARCH` 子句。
+
+## 实现备注
+
+- **CALL 子查询作用域**：检索中使用带作用域的子查询 `CALL (hit) { ... }`，以避免 Neo4j 将无作用域的 `CALL { ... }` 标记为已弃用，同时保证子查询可以访问外部绑定变量（例如 `hit`）。
+- **关系类型过滤**：为了避免在数据库尚未有某种关系类型时收到 `relationship type does not exist` 的警告，查询实现采用通用关系模式 `-[r]-`，然后通过 `WHERE type(r) IN ['INSP_COMBINES','INSP_QUESTION','QUESTION_COMBINES']` 进行过滤。这样更健壮且便于索引/类型逐步上线。
 
 ## 遍历查询
 

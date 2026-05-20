@@ -61,8 +61,8 @@ def _get_edges_batch(
     if not node_ids:
         return {}
     query = """
-    MATCH (n)-[r:INSP_COMBINES|INSP_QUESTION|QUESTION_COMBINES]-(m)
-    WHERE n.id IN $node_ids
+    MATCH (n)-[r]-(m)
+    WHERE n.id IN $node_ids AND type(r) IN ['INSP_COMBINES','INSP_QUESTION','QUESTION_COMBINES']
     RETURN n.id AS source_id, type(r) AS rel_type, r.weight AS weight, m AS target
     ORDER BY source_id, weight DESC
     """
@@ -82,7 +82,8 @@ def _get_edges_batch(
 
 def _get_edges_for_node(client: Neo4jClient, node_id: str) -> list[dict[str, Any]]:
     query = """
-    MATCH (n {id: $node_id})-[r:INSP_COMBINES|INSP_QUESTION|QUESTION_COMBINES]-(m)
+    MATCH (n {id: $node_id})-[r]-(m)
+    WHERE type(r) IN ['INSP_COMBINES','INSP_QUESTION','QUESTION_COMBINES']
     RETURN type(r) AS rel_type, r.weight AS weight, m AS target
     ORDER BY weight DESC
     """
