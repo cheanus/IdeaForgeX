@@ -166,7 +166,8 @@ def append_known_instance(tx, node_ids: list[str], entry: str) -> None:
 ```python
 def create_edge(tx, from_id: str, to_id: str, rel_type: str, weight: float):
     tx.run(f"""
-        MATCH (a {{id: $from_id}}), (b {{id: $to_id}})
+        MATCH (a {{id: $from_id}})
+        MATCH (b {{id: $to_id}})
         CREATE (a)-[:{rel_type} {{weight: $weight}}]->(b)
     """, from_id=from_id, to_id=to_id, weight=weight)
 ```

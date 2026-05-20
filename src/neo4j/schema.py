@@ -85,7 +85,8 @@ def create_edge(tx, edge: Edge) -> None:
     )
     tx.run(
         f"""
-        MATCH (a {{id: $from_id}}), (b {{id: $to_id}})
+        MATCH (a {{id: $from_id}})
+        MATCH (b {{id: $to_id}})
         CREATE (a)-[:{rel_type} {{weight: $weight}}]->(b)
         """,
         from_id=edge.from_id,
