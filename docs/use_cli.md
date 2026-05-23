@@ -33,7 +33,7 @@ ideaforgex bootstrap
 ideaforgex reset
 ```
 
-`DETACH DELETE` 所有 Inspiration 和 Question 节点及其关联边。**不可逆操作。**
+`DETACH DELETE` 所有 Inspiration 和 Question 节点及其关联边，同时清空 SQLite 论文库。**不可逆操作。**
 
 ---
 

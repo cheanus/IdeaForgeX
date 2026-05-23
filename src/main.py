@@ -12,6 +12,7 @@ from src.config import load_config
 from src.llm.client import ChatClient
 from src.neo4j.client import create_client
 from src.neo4j.schema import ensure_schema, reset_practice_graph
+from src.paper.library import PaperLibrary
 
 _logger = logging.getLogger("ideaforgex")
 
@@ -96,7 +97,8 @@ def main() -> None:
         if args.command == "reset":
             _logger.info("开始清空实践库 …")
             reset_practice_graph(neo4j_client)
-            _logger.info("已清空实践库")
+            PaperLibrary(config.paper_library_path).clear()
+            _logger.info("已清空实践库和论文库")
             return
         if args.command == "train":
             _logger.info("开始训练，论文 ID: %s", args.paper)

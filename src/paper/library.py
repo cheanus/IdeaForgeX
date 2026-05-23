@@ -54,3 +54,8 @@ class PaperLibrary:
         if reserved:
             _logger.info("标记论文已训练: %s", paper_id)
         return reserved
+
+    def clear(self) -> None:
+        """清空所有论文记录。"""
+        with self._connect() as conn:
+            conn.execute("DELETE FROM papers")
