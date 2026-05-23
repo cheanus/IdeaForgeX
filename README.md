@@ -2,128 +2,132 @@
 
 [English](README.md) | [简体中文](docs/README_zh.md)
 
-AI 论文创新点知识图谱系统。训练时通过 LLM 从论文中提炼方法灵感和研究问题，写入 Neo4j 知识图谱；推理时外部 agent 通过 CLI 检索图数据，自行编排创新点生成。
+**Open-source knowledge graph for AI research ideas.** Train by feeding papers and let LLMs distill reusable method inspirations and research questions into a Neo4j graph. At inference time, external AI agents query the graph via CLI to compose novel research directions.
 
-## What It Does
+[![License](https://img.shields.io/badge/license-AGPLv3-blue)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
+[![Neo4j](https://img.shields.io/badge/neo4j-community-green)](https://neo4j.com/)
+[![LangGraph](https://img.shields.io/badge/framework-langgraph-orange)](https://langchain-ai.github.io/langgraph/)
 
-- Discover and load papers from AMiner, with arXiv fallback for full text
-- Build a practice graph in Neo4j with `Inspiration` and `Question` nodes
-- Run an LLM A-only training loop to decide whether a paper can be recorded directly or needs structured candidate generation
-- Expose CLI search commands (`retrieve` / `inspect`) for external agents to query the knowledge graph
-- Keep the whole system testable with local Docker services
+---
 
-## Why It Exists
+## Why IdeaForgeX
 
-Most paper-to-idea systems either stop at summaries or require too much manual curation. IdeaForgeX keeps the workflow structured, reproducible, and graph-backed so ideas can be reused, traced, and improved over time. The inference side is intentionally thin — just a query API — so external agents can assemble their own innovation pipelines on top.
+Most paper-to-idea pipelines stop at summaries or require manual curation. IdeaForgeX builds a **structured, graph-backed knowledge base** where ideas are first-class entities — traceable, reusable, and improvable over time. The inference layer is intentionally thin (just a CLI query API) so external AI agents can assemble their own innovation workflows on top.
 
 ## Highlights
 
-- Single LLM A workflow for training, no feedback loop noise
-- Neo4j-backed knowledge graph for ideas and questions
-- CLI-only inference: `retrieve` and `inspect` commands for external agents
-- Local Docker setup for test and personal databases
-- AMiner + arXiv fallback paper loading
-- Full regression test suite
+- 🧠 **One LLM, clean loop** — single LLM-A judge decides whether a paper yields extractable ideas or just needs recording. No feedback-loop noise.
+- 🕸️ **Neo4j knowledge graph** — dual node types (`Inspiration` + `Question`), four edge types, multi-granularity refinement chains
+- 🔌 **Agent-friendly CLI** — four query commands (`retrieve`, `inspect`, `random`, `relate`) return structured JSON for external agents
+- 🐳 **Local Docker setup** — test and personal Neo4j instances via `docker compose`
+- 📄 **AMiner + arXiv** — tiered paper resolution with automatic fallback
+- ✅ **Full test suite** — `uv run pytest -v` covers training, retrieval, and CLI output
 
 ## Project Structure
 
-- `src/agent/` — LangGraph training workflow
-- `src/llm/` — prompt construction and chat client
-- `src/paper/` — AMiner, arXiv, and paper loading helpers
-- `src/neo4j/` — schema, maintenance, and retrieval logic
-- `src/cli/` — CLI query commands (`retrieve` / `inspect`)
-- `tests/` — regression coverage for the main flows
-- `docs/` — design, architecture, data model, and CLI spec docs
-
-## Requirements
-
-- Python 3.11+
-- `uv`
-- Docker and Docker Compose
-- A running Neo4j instance, or the provided compose services
+| Directory | Purpose |
+|---|---|
+| `src/agent/` | LangGraph training workflow |
+| `src/llm/` | Prompt templates and chat/embedding client |
+| `src/paper/` | AMiner discovery, arXiv PDF extraction, paper resolver |
+| `src/neo4j/` | Schema bootstrap, retrieval traversal, graph maintenance |
+| `src/cli/` | CLI query commands (`retrieve` / `inspect` / `random` / `relate`) |
+| `tests/` | Regression coverage for training, CLI, config, and LLM client |
+| `docs/` | Design, architecture, data model, CLI usage guide |
 
 ## Quick Start
 
-First time setup:
+### Prerequisites
+
+- Python 3.11+
+- [`uv`](https://docs.astral.sh/uv/) package manager
+- Docker + Docker Compose (for Neo4j)
+
+### Setup
 
 ```bash
+# 1. Clone and install dependencies
+git clone https://github.com/<your-org>/IdeaForgeX.git
+cd IdeaForgeX
+uv sync
+
+# 2. Start Neo4j
 docker compose up -d
+
+# 3. Create config from template
 cp config.example.yaml config.yaml
+```
+
+> Edit `config.yaml` and fill in your API keys:
+> - `llm_api_key` — your LLM provider (DeepSeek, OpenAI, etc.)
+> - `embedding_api_key` — your embedding provider
+> - `aminer_api_key` — [AMiner](https://www.aminer.cn/) API key for paper discovery
+> - `neo4j_password` — Neo4j database password
+
+```bash
+# 4. Bootstrap the graph schema (idempotent)
 uv run python main.py bootstrap
 ```
 
-Usage:
-
-```
-uv run python main.py train <paper_id/keyword>
-uv run python main.py retrieve <query_text>
-uv run python main.py inspect <node_id>
-```
-
-Examples:
+### Usage
 
 ```bash
-uv run python main.py train 1706.03762
-uv run python main.py retrieve "使用扩散模型做医学图像分割的少样本学习"
-uv run python main.py inspect insp-3f2a1...
+# Train a paper into the knowledge graph
+uv run python main.py train 1706.03762          # arXiv ID
+uv run python main.py train "Attention Is All You Need"  # title search
+
+# Query the graph (external agents call these commands)
+uv run python main.py retrieve "few-shot learning with diffusion models"
+uv run python main.py inspect INSP_4
+uv run python main.py random --count 5
+uv run python main.py random --query "cross-modal attention" --count 3
+uv run python main.py relate INSP_1 INSP_10
 ```
 
-CLI 命令详细规范见 `docs/use_cli.md`。
+For detailed CLI reference, see [`docs/use_cli.md`](docs/use_cli.md).
 
-## Neo4j Targets
-
-- `neo4j-test` uses `bolt://localhost:7687`
-- `neo4j-personal` uses `bolt://localhost:7688`
-- Reset a graph:
+### Graph Reset
 
 ```bash
+# Reset test or personal database
 ./scripts/neo4j-reset.sh test
 ./scripts/neo4j-reset.sh personal
 ```
 
 ## Testing
 
-Run the full suite:
-
 ```bash
-./scripts/test.sh
-```
-
-Or directly:
-
-```bash
-uv run pytest -q
+uv run pytest -v
 ```
 
 ## Configuration
 
-All settings come from `config.yaml` and environment variables through `src/config.py`.
+All parameters live in `config.yaml` (see `config.example.yaml` for defaults). Environment variables prefixed with `IDEAFORGEX_` can override any field at runtime.
 
-Key fields include:
+| Section | Key fields |
+|---|---|
+| LLM | `llm_base_url`, `llm_api_key`, `llm_model_name` |
+| Embedding | `embedding_base_url`, `embedding_api_key`, `embedding_model_name`, `embedding_dim` |
+| Paper | `aminer_api_key`, `arxiv_short_abstract_threshold` |
+| Neo4j | `neo4j_uri`, `neo4j_user`, `neo4j_password`, `neo4j_database` |
+| Retrieval | `k_hits`, `max_neighbors`, `max_depth`, `score_decay`, `final_k` |
+| Logging | `log_level` — `DEBUG` / `INFO` / `WARNING` / `ERROR` (overridden by `LOG_LEVEL` env var) |
 
-- LLM base URL and API key
-- embedding base URL and API key
-- AMiner API key
-- Neo4j URI, user, password, and database
-- retrieval top-k and traversal settings
+## How It Works
 
-## Development Notes
+**Training**: A LangGraph state machine loads a paper, generates a retrieval query, searches the graph, and calls the LLM to decide whether the paper introduces novel ideas worth extracting. New `Inspiration` and `Question` nodes are written transactionally into Neo4j.
 
-- Training is implemented as a LangGraph state machine.
-- LLM output is validated through Pydantic models before any Neo4j writes.
-- If validation fails, the workflow retries according to the configured policy.
-- The `retrieve` and `inspect` CLI commands are stateless; all orchestration is done by external agents.
+**Inference**: External AI agents call CLI commands to explore the graph — `retrieve` for relevance-ranked search, `inspect` for deep dives, `random` for serendipity, and `relate` for path discovery. The agent then composes novelty proposals using its own LLM.
 
 ## License
 
-This project is licensed under the GNU AGPLv3. See `LICENSE` for details.
+This project is licensed under the GNU AGPLv3. See [`LICENSE`](LICENSE) for details.
 
 ## Contributing
 
-Issues and pull requests are welcome.
+Issues and pull requests are welcome. Before opening a PR:
 
-Before opening a PR, please make sure:
-
-- `uv run pytest -q` passes
-- `bootstrap`, `train`, `retrieve`, and `inspect` work locally
-- New behavior is covered by tests when practical
+- `uv run pytest -v` must pass
+- `bootstrap`, `train`, `retrieve`, `inspect`, `random`, and `relate` should work locally
+- New behavior should be covered by tests
