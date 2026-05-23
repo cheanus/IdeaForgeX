@@ -10,3 +10,6 @@ wheels/
 .venv
 
 config.yaml
+
+# Runtime data
+data/

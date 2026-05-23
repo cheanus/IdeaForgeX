@@ -47,6 +47,7 @@ class Config(BaseSettings):
     max_depth: int = Field(default=1)
     score_decay: float = Field(default=0.5)
     final_k: int = Field(default=15)
+    paper_library_path: str = Field(default="data/trained_papers.db")
     arxiv_short_abstract_threshold: int = Field(default=200)
     log_level: str = Field(default="INFO")
 

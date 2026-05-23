@@ -102,7 +102,10 @@ def main() -> None:
             _logger.info("开始训练，论文 ID: %s", args.paper)
             graph = build_training_graph(config, llm_client, neo4j_client)
             result = run_training(graph, args.paper)
-            _logger.info("训练完成，已生成训练图谱")
+            if result.get("already_trained"):
+                _logger.info("训练跳过，论文已存在于论文库")
+            else:
+                _logger.info("训练完成，已生成训练图谱")
             return
         if args.command == "retrieve":
             _logger.info("开始检索: %s", args.query)

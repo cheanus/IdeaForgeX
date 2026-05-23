@@ -57,4 +57,4 @@
 
 ## 4. 论文库
 
-已训练论文 ID 集合，仅用于去重。不存向量。
+SQLite 文件（`data/trained_papers.db`），WAL 模式。`(paper_id, title, year, trained_at)` 四列，仅用于去重。不存向量。

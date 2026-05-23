@@ -26,11 +26,25 @@ def _zero_vector(dim: int) -> list[float]:
     return [0.0] * dim
 
 
+def _mock_paper_library(monkeypatch):
+    """使论文库始终返回 False（未训练），不阻断训练流程。"""
+    monkeypatch.setattr(
+        "src.agent.training.PaperLibrary.is_trained", lambda self, paper_id: False
+    )
+    add_called: list[tuple] = []
+
+    def fake_add(self, paper_id, title, year=""):
+        add_called.append((paper_id, title, year))
+
+    monkeypatch.setattr("src.agent.training.PaperLibrary.add", fake_add)
+    return add_called
+
+
 @pytest.mark.neo4j
 def test_training_graph_routes_can_infer_to_commit_candidates(
     monkeypatch, neo4j_client
 ):
-    """验证 can_infer=True 时走 commit_candidates 路径。"""
+    """验证 can_infer=True 时走 commit_candidates → mark_trained 路径。"""
     config = Config(
         neo4j_database="neo4j",
         arxiv_short_abstract_threshold=200,
@@ -56,6 +70,7 @@ def test_training_graph_routes_can_infer_to_commit_candidates(
         raise RuntimeError(f"unexpected parser: {parser}")
 
     monkeypatch.setattr("src.agent.training.call_with_retry", fake_call_with_retry)
+    add_called = _mock_paper_library(monkeypatch)
 
     graph = build_training_graph(config, FakeEmbeddingClient(), neo4j_client)  # type: ignore[reportArgumentType]
     result = graph.invoke(
@@ -68,15 +83,14 @@ def test_training_graph_routes_can_infer_to_commit_candidates(
     assert result["paper_title"] == ATTENTION_TITLE
     assert result["paper_text"] == ATTENTION_ABSTRACT
     assert result["can_infer"] is True
+    assert result.get("already_trained") is False
     assert len(result["retrieved_nodes"]) == 1
     assert call_count[0] == 2
 
-    # can_infer=True 走 commit_candidates，不产生 PaperRecord
-    with neo4j_client.driver.session(
-        database=neo4j_client.config.neo4j_database
-    ) as session:
-        records = session.run("MATCH (r:PaperRecord) RETURN count(r) AS c").data()
-        assert records[0]["c"] == 0
+    # 验证 mark_trained 节点调用了 PaperLibrary.add
+    assert len(add_called) == 1
+    assert add_called[0][0] == resolved_id
+    assert add_called[0][1] == ATTENTION_TITLE
 
 
 @pytest.mark.neo4j
@@ -123,6 +137,7 @@ def test_training_graph_commits_candidates_when_can_infer(monkeypatch, neo4j_cli
         raise RuntimeError(f"unexpected parser: {parser}")
 
     monkeypatch.setattr("src.agent.training.call_with_retry", fake_call_with_retry)
+    add_called = _mock_paper_library(monkeypatch)
 
     graph = build_training_graph(config, FakeEmbeddingClient(), neo4j_client)  # type: ignore[reportArgumentType]
     result = graph.invoke(
@@ -148,6 +163,10 @@ def test_training_graph_commits_candidates_when_can_infer(monkeypatch, neo4j_cli
         ).single()
         assert edge_record is not None
         assert edge_record["w"] == 0.8
+
+    # 验证 mark_trained 被调用
+    assert len(add_called) == 1
+    assert add_called[0][0] == result.get("paper_id")
 
 
 @pytest.mark.neo4j
@@ -194,6 +213,7 @@ def test_training_graph_commits_node_updates(monkeypatch, neo4j_client):
         raise RuntimeError(f"unexpected parser: {parser}")
 
     monkeypatch.setattr("src.agent.training.call_with_retry", fake_call_with_retry)
+    _mock_paper_library(monkeypatch)
 
     graph = build_training_graph(config, FakeEmbeddingClient(), neo4j_client)  # type: ignore[reportArgumentType]
     result = graph.invoke(
@@ -212,6 +232,43 @@ def test_training_graph_commits_node_updates(monkeypatch, neo4j_client):
         assert len(records) == 1
         # 已知实例不再由 LLM 产出，改为代码自动追加论文元信息
         assert records[0]["ex"] == "old example; Attention Is All You Need (2017)"
+
+
+@pytest.mark.neo4j
+def test_training_graph_skips_duplicate(monkeypatch, neo4j_client):
+    """验证论文已训练时跳过整个训练流程。"""
+    config = Config(
+        neo4j_database="neo4j",
+        arxiv_short_abstract_threshold=200,
+    )
+
+    monkeypatch.setattr("src.paper.resolver.AMinerClient", FakeAMinerClient)
+    monkeypatch.setattr("src.paper.resolver.ArxivExtractor", FakeArxivExtractor)
+    monkeypatch.setattr(
+        "src.agent.training.PaperLibrary.is_trained", lambda self, paper_id: True
+    )
+
+    call_count = [0]
+
+    def fake_call_with_retry(
+        client, messages, max_retries=3, temperature=0.1, parser=None
+    ):
+        call_count[0] += 1
+        raise RuntimeError("LLM 不应被调用")
+
+    monkeypatch.setattr("src.agent.training.call_with_retry", fake_call_with_retry)
+
+    graph = build_training_graph(config, FakeEmbeddingClient(), neo4j_client)  # type: ignore[reportArgumentType]
+    result = graph.invoke(
+        {"paper_id": TEST_PAPER_ID, "retry_count": 0},  # type: ignore[reportArgumentType]
+        {"configurable": {"thread_id": TEST_PAPER_ID}},
+    )
+
+    assert result["already_trained"] is True
+    assert result["paper_title"] == ATTENTION_TITLE
+    assert "query_text" not in result
+    assert "can_infer" not in result
+    assert call_count[0] == 0
 
 
 def test_parse_query_text():

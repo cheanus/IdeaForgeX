@@ -24,6 +24,7 @@ from src.models import Edge, InspirationNode, NodeUpdate, QuestionNode
 from src.neo4j.client import Neo4jClient
 from src.neo4j.retrieval import retrieve_with_traversal
 from src.neo4j.schema import append_known_instance, batch_update, batch_write
+from src.paper.library import PaperLibrary
 from src.paper.resolver import build_practice_summary, resolve_paper_spec
 
 _logger = logging.getLogger("ideaforgex")
@@ -37,6 +38,7 @@ class TrainingState(TypedDict, total=False):
     query_text: str
     retrieved_nodes: list[dict]
     can_infer: bool
+    already_trained: bool
     llm_a: dict
     inspirations: list[dict]
     questions: list[dict]
@@ -46,6 +48,8 @@ class TrainingState(TypedDict, total=False):
 
 
 def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4jClient):
+    paper_library = PaperLibrary(config.paper_library_path)
+
     def load_paper(state: TrainingState) -> dict:
         paper_text = state.get("paper_text", "")
         if paper_text:
@@ -60,6 +64,16 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
             "paper_year": record.get("year", ""),
             "paper_text": record["text"],
         }
+
+    def check_duplicate(state: TrainingState) -> dict:
+        paper_id = state["paper_id"]  # type: ignore[reportTypedDictNotRequiredAccess]
+        if paper_library.is_trained(paper_id):
+            _logger.info("论文已训练，跳过: %s", paper_id)
+            return {"already_trained": True}
+        return {"already_trained": False}
+
+    def route_after_dup(state: TrainingState) -> str:
+        return "skip" if state.get("already_trained") else "generate_query"
 
     def generate_query(state: TrainingState) -> dict:
         _logger.info("正在生成检索查询 …")
@@ -112,17 +126,7 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
         }
 
     def route_after_llm_a(state: TrainingState) -> str:
-        return "commit_candidates" if state.get("can_infer") else "record_paper"
-
-    def record_paper(state: TrainingState) -> dict:
-        _logger.info("无需新增节点，仅记录论文")
-        with neo4j_client.driver.session(database=config.neo4j_database) as session:
-            session.run(
-                "CREATE (:PaperRecord {id: $id, title: $title})",
-                id=state["paper_id"],  # type: ignore[reportTypedDictNotRequiredAccess]
-                title=state.get("paper_title", ""),
-            )
-        return {}
+        return "commit_candidates"
 
     def commit_candidates(state: TrainingState) -> dict:
         _logger.info("正在提交候选人到图谱 …")
@@ -180,8 +184,20 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
         )
         return {}
 
+    def mark_trained(state: TrainingState) -> dict:
+        paper_library.add(
+            state["paper_id"],  # type: ignore[reportTypedDictNotRequiredAccess]
+            state.get("paper_title", ""),
+            state.get("paper_year", ""),
+        )
+        return {}
+
+    def skip_training(state: TrainingState) -> dict:
+        return {}
+
     graph = StateGraph(TrainingState)
     graph.add_node("load_paper", load_paper)
+    graph.add_node("check_duplicate", check_duplicate)
     graph.add_node("generate_query", generate_query)
     graph.add_node("retrieve", retrieve)
     graph.add_node(
@@ -189,20 +205,27 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
         llm_a_judge,
         retry_policy=RetryPolicy(max_attempts=config.max_retries),
     )
-    graph.add_node("record_paper", record_paper)
     graph.add_node("commit_candidates", commit_candidates)
+    graph.add_node("mark_trained", mark_trained)
+    graph.add_node("skip", skip_training)
 
     graph.add_edge(START, "load_paper")
-    graph.add_edge("load_paper", "generate_query")
+    graph.add_edge("load_paper", "check_duplicate")
+    graph.add_conditional_edges(
+        "check_duplicate",
+        route_after_dup,
+        {"skip": "skip", "generate_query": "generate_query"},
+    )
+    graph.add_edge("skip", END)
     graph.add_edge("generate_query", "retrieve")
     graph.add_edge("retrieve", "llm_a_judge")
     graph.add_conditional_edges(
         "llm_a_judge",
         route_after_llm_a,
-        {"record_paper": "record_paper", "commit_candidates": "commit_candidates"},
+        {"commit_candidates": "commit_candidates"},
     )
-    graph.add_edge("record_paper", END)
-    graph.add_edge("commit_candidates", END)
+    graph.add_edge("commit_candidates", "mark_trained")
+    graph.add_edge("mark_trained", END)
 
     memory = MemorySaver()
     return graph.compile(checkpointer=memory)

@@ -37,7 +37,7 @@ Neo4j 异构图，存储 Inspiration 和 Question 两种节点及四种边。向
 
 ### 3.2 论文库
 
-已训练论文 ID 集合，仅去重，不存向量。
+SQLite 文件（`data/trained_papers.db`）存储已训练论文 ID 集合，仅用于去重。WAL 模式支持并发读。
 
 ### 3.3 失败库
 
@@ -56,13 +56,15 @@ flowchart TD
     S["START"]
     S --> D["AMiner paper_qa_search: 按主题发现论文列表"]
     D --> P1["逐篇: 加载论文内容<br/>arXiv → AMiner 降级"]
-    P1 --> GEN["LLM 提炼检索查询文本"]
+    P1 --> DUP{"论文已训练?"}
+    DUP -->|是| SKIP["跳过"]
+    SKIP --> D
+    DUP -->|否| GEN["LLM 提炼检索查询文本"]
     GEN --> RET["5 阶段图检索遍历"]
     RET --> A1{"LLM A: 基于论文 + 检索结果 + 实践库<br/>判断已有节点修改/新增"}
-    A1 -->|能| PAPER["记录至论文库"]
-    PAPER --> D
-    A1 -->|否| COMMIT["事务写入: 先更新已有节点 + 后创建新节点/边"]
-    COMMIT --> PAPER
+    A1 --> COMMIT["事务写入: 先更新已有节点 + 后创建新节点/边"]
+    COMMIT --> MARK["标记论文为已训练 (SQLite)"]
+    MARK --> D
 ```
 
 ## 6. 推理流程
