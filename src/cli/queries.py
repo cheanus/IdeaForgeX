@@ -19,15 +19,6 @@ QUESTION_FIELDS: list[str] = ["问题类型", "当前现状", "未解决部分"]
 INSPIRATION_FIELDS: list[str] = ["前提条件", "操作步骤", "已知实例"]
 
 
-def _build_snippet(node: dict[str, Any]) -> dict[str, str]:
-    type_label = node.get("type", "")
-    if type_label == "Question":
-        fields = QUESTION_FIELDS
-    else:
-        fields = INSPIRATION_FIELDS
-    return {f: str(node.get(f, "")) for f in fields if node.get(f)}
-
-
 def _build_chain(node: dict[str, Any], client: Neo4jClient) -> list[dict[str, Any]]:
     if node.get("type") == "Question" or "粒度" not in node:
         return []
@@ -53,31 +44,6 @@ def _build_chain(node: dict[str, Any], client: Neo4jClient) -> list[dict[str, An
         )
     chain.sort(key=lambda c: c["granularity"])
     return chain
-
-
-def _get_edges_batch(
-    client: Neo4jClient, node_ids: list[str]
-) -> dict[str, list[dict[str, Any]]]:
-    if not node_ids:
-        return {}
-    query = """
-    MATCH (n)-[r]-(m)
-    WHERE n.id IN $node_ids AND type(r) IN ['INSP_COMBINES','INSP_QUESTION','QUESTION_COMBINES']
-    RETURN n.id AS source_id, type(r) AS rel_type, r.weight AS weight, m AS target
-    ORDER BY source_id, weight DESC
-    """
-    with client.session() as session:
-        result = session.run(query, node_ids=node_ids)
-        edges_by_source: dict[str, list[dict[str, Any]]] = {nid: [] for nid in node_ids}
-        for record in result:
-            edges_by_source[record["source_id"]].append(
-                {
-                    "type": record["rel_type"],
-                    "weight": float(record["weight"]),
-                    "target": dict(record["target"]),
-                }
-            )
-        return edges_by_source
 
 
 def _get_edges_for_node(client: Neo4jClient, node_id: str) -> list[dict[str, Any]]:
@@ -131,40 +97,17 @@ def cmd_retrieve(
     total_hits = len(candidates)
     ranked = candidates[: effective_config.final_k]
 
-    k_hits = effective_config.k_hits
-    max_depth = effective_config.max_depth
-    score_decay = effective_config.score_decay
-
-    node_ids = [item["node"]["id"] for item in ranked]
-    edges_map = _get_edges_batch(neo4j_client, node_ids)
-
     nodes: list[dict[str, Any]] = []
     for item in ranked:
         raw_node = item["node"]
-        node_id = raw_node["id"]
-        chain = _build_chain(raw_node, neo4j_client)
-        raw_edges = edges_map.get(node_id, [])
-        edges_out: list[dict[str, Any]] = []
-        for e in raw_edges:
-            tgt = e["target"]
-            edges_out.append(
-                {
-                    "type": EDGE_TYPE_LABELS.get(e["type"], e["type"]),
-                    "target": tgt["id"],
-                    "weight": e["weight"],
-                    "target_summary": tgt.get("核心描述", ""),
-                }
-            )
         nodes.append(
             {
-                "id": node_id,
+                "id": raw_node["id"],
                 "type": raw_node.get("type", ""),
                 "score": item["score"],
+                "source": item.get("source", "unknown"),
                 "granularity": raw_node.get("粒度"),
                 "core_description": raw_node.get("核心描述", ""),
-                "snippet": _build_snippet(raw_node),
-                "chain": chain,
-                "edges": edges_out,
             }
         )
 
@@ -175,8 +118,6 @@ def cmd_retrieve(
         "nodes": nodes,
         "meta": {
             "total_hits": total_hits,
-            "expansion_hops": max_depth,
-            "decay_factor": score_decay,
             "runtime_ms": runtime_ms,
         },
     }

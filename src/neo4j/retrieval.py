@@ -100,14 +100,19 @@ def retrieve_with_traversal(
     for hit in vectors:
         node = hit.node
         node_id = node["id"]
-        candidates[node_id] = {"node": node, "score": hit.score}
+        candidates[node_id] = {"node": node, "score": hit.score, "source": "vector"}
         if node.get("type") == "Inspiration" or "粒度" in node:
             for finer in expand_refinement_chain(client, node_id):
-                candidates[finer["id"]] = {"node": finer, "score": hit.score}
+                candidates[finer["id"]] = {
+                    "node": finer,
+                    "score": hit.score,
+                    "source": "chain",
+                }
 
     frontier = list(candidates.values())
     for _depth in range(config.max_depth):
         next_frontier: list[dict[str, Any]] = []
+        hop_label = f"{_depth + 1}-hop"
         for item in frontier:
             node = item["node"]
             source_score = float(item["score"])
@@ -116,8 +121,14 @@ def retrieve_with_traversal(
                 score = source_score * config.score_decay
                 existing = candidates.get(node_data["id"])
                 if existing is None or score > existing["score"]:
-                    candidates[node_data["id"]] = {"node": node_data, "score": score}
-                    next_frontier.append({"node": node_data, "score": score})
+                    candidates[node_data["id"]] = {
+                        "node": node_data,
+                        "score": score,
+                        "source": hop_label,
+                    }
+                    next_frontier.append(
+                        {"node": node_data, "score": score, "source": hop_label}
+                    )
         frontier = next_frontier
 
     ranked = sorted(candidates.values(), key=lambda item: item["score"], reverse=True)

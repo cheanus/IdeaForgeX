@@ -16,15 +16,17 @@ CLI 仅暴露知识图谱的**查询层**。生成创新点、多轮交互、论
 ### 输入
 
 | 参数 | 类型 | 必填 | 说明 |
-|---|---|---|---|
+|---|---|---|---|---|
 | `query` | string | ✅ | 查询文本（论文摘要 / 一句话想法 / 关键词） |
-| `top_k` | int | 否 | 向量命中数，默认 10 |
-| `expand_hops` | int | 否 | 非精化边最大扩展深度，默认 2 |
-| `max_per_node` | int | 否 | 每节点扩展上限，默认 3 |
-| `decay` | float | 否 | 分数衰减因子，默认 0.7 |
-| `final_limit` | int | 否 | 最终截断数，默认 20 |
+| `top_k` | int | 否 | 向量命中数，默认 8 |
+| `expand_hops` | int | 否 | 非精化边最大扩展深度，默认 1 |
+| `max_per_node` | int | 否 | 每节点扩展上限，默认 2 |
+| `decay` | float | 否 | 分数衰减因子，默认 0.5 |
+| `final_limit` | int | 否 | 最终截断数，默认 15 |
 
 ### 输出
+
+`retrieve` 返回精简视图，仅含节点识别信息和检索质量元数据。agent 根据 `core_description` 和 `source` 判断哪些节点值得深入，再通过 `inspect` 获取全字段 + 精化链 + 边详情。
 
 ```json
 {
@@ -34,29 +36,30 @@ CLI 仅暴露知识图谱的**查询层**。生成创新点、多轮交互、论
       "id": "insp-3f2a1...",
       "type": "Inspiration",
       "score": 0.92,
+      "source": "vector",
       "granularity": 1,
-      "core_description": "将生成式先验注入判别式模型的少样本学习范式",
-      "snippet": {
-        "前提条件": "有大规模预训练生成模型可用",
-        "操作步骤": "1) 将预训练扩散模型的去噪过程作为特征提取器...",
-        "已知实例": "DDPMSeg (MICCAI 2023)"
-      },
-      "chain": [
-        {"id": "insp-8b4c...", "granularity": 0, "core_description": "生成先验注入判别模型", "direction": "coarser"},
-        {"id": "insp-3f2a...", "granularity": 1, "core_description": "生成式先验注入判别式模型的少样本学习范式", "direction": "self"},
-        {"id": "insp-1d9e...", "granularity": 2, "core_description": "StableDiffusion特征金字塔+UNet分割头", "direction": "finer"}
-      ],
-      "edges": [
-        {"type": "灵感组合边", "target": "insp-c77f...", "weight": 0.83, "target_summary": "多尺度特征对齐"},
-        {"type": "灵感问题边", "target": "q-4a2e...", "weight": 0.76, "target_summary": "医学图像标注成本高导致少样本过拟合"}
-      ]
+      "core_description": "将生成式先验注入判别式模型的少样本学习范式"
+    },
+    {
+      "id": "insp-1d9e...",
+      "type": "Inspiration",
+      "score": 0.87,
+      "source": "chain",
+      "granularity": 2,
+      "core_description": "StableDiffusion特征金字塔+UNet分割头"
+    },
+    {
+      "id": "insp-c77f...",
+      "type": "Inspiration",
+      "score": 0.46,
+      "source": "1-hop",
+      "granularity": 2,
+      "core_description": "多尺度特征对齐"
     }
   ],
   "meta": {
-    "total_hits": 47,
-    "expansion_hops": 2,
-    "decay_factor": 0.7,
-    "runtime_ms": 120
+    "total_hits": 15,
+    "runtime_ms": 85
   }
 }
 ```
@@ -65,11 +68,14 @@ CLI 仅暴露知识图谱的**查询层**。生成创新点、多轮交互、论
 
 | 字段 | 说明 |
 |---|---|
-| `nodes[].core_description` | 该粒度描述文本，agent 第一眼看节点就靠它 |
-| `nodes[].snippet` | 折叠次要字段（前提条件 / 操作步骤 / 已知实例），供 agent 判断方向价值 |
-| `nodes[].chain` | 内联精化链（按粒度升序），包含当前节点及其上下游，`direction` 标注 `self` / `coarser` / `finer` |
-| `nodes[].edges` | 1-hop 扩展边，`target_summary` 仅给摘要不展开，agent 感兴趣再 `inspect` |
-| `meta.total_hits` | 检索命中总数，agent 据此判断检索质量（过低时可提示用户换查询词） |
+| `nodes[].id` | 节点唯一 ID，供 `inspect` 钻取 |
+| `nodes[].type` | 节点类型：`Inspiration` 或 `Question` |
+| `nodes[].score` | 检索得分，用于 agent 排序判断相关性 |
+| `nodes[].source` | 来源：`vector`(向量命中)、`chain`(精化链展开)、`1-hop`/`2-hop`(图扩展)。agent 据此加权信任度 |
+| `nodes[].granularity` | 仅 Inspiration：方法粒度（0=高层次范式，1=具体方法，2=实例化技术） |
+| `nodes[].core_description` | 该节点核心描述文本，agent 第一眼看节点就靠它 |
+| `meta.total_hits` | 检索命中总数，agent 据此判断检索质量 |
+| `meta.runtime_ms` | 检索耗时（毫秒） |
 
 ---
 
@@ -135,7 +141,7 @@ CLI 仅暴露知识图谱的**查询层**。生成创新点、多轮交互、论
 
 ```
 用户：「我有篇论文摘要……帮我找创新方向」
-  → agent 调 retrieve(query=摘要) → 拿到 top-20 节点
+  → agent 调 retrieve(query=摘要) → 拿到 top-15 节点（仅 id + core_description + source）
   → agent 展示节点列表给用户确认/过滤
   → 用户：「第三个节点的精化链里更细那个具体怎么做？」
   → agent 调 inspect(id=insp-1d9e...) → 展开全字段

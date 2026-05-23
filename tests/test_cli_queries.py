@@ -94,35 +94,17 @@ def _make_fake_neo4j_client_ctx(session):
 
 
 def test_cmd_retrieve_format(monkeypatch):
-    """验证 cmd_retrieve 输出格式符合 docs/use_cli.md 定义。"""
+    """验证 cmd_retrieve 输出为瘦身格式：id + type + score + source + core_description。"""
     config = Config()
 
     def fake_retrieve_with_traversal(client, embedding, cfg):
         return [
-            {"node": FAKE_INSP_NODE, "score": 0.92},
-            {"node": FAKE_QUESTION_NODE, "score": 0.85},
+            {"node": FAKE_INSP_NODE, "score": 0.92, "source": "vector"},
+            {"node": FAKE_QUESTION_NODE, "score": 0.85, "source": "chain"},
         ]
 
     monkeypatch.setattr(
         "src.cli.queries.retrieve_with_traversal", fake_retrieve_with_traversal
-    )
-
-    def fake_build_chain(node, client):
-        if node.get("type") == "Question":
-            return []
-        return [
-            {
-                "id": n["id"],
-                "granularity": n["粒度"],
-                "core_description": n["核心描述"],
-                "direction": d,
-            }
-            for n, d in zip(FAKE_CHAIN_INSP, ["coarser", "self", "finer"])
-        ]
-
-    monkeypatch.setattr("src.cli.queries._build_chain", fake_build_chain)
-    monkeypatch.setattr(
-        "src.cli.queries._get_edges_batch", lambda c, ids: FAKE_EDGES_BATCH
     )
 
     result = cmd_retrieve(
@@ -134,7 +116,6 @@ def test_cmd_retrieve_format(monkeypatch):
 
     assert result["query"] == "使用注意力机制做序列建模"
     assert "meta" in result
-    assert result["meta"]["expansion_hops"] == config.max_depth
     assert isinstance(result["meta"]["runtime_ms"], int)
     assert result["meta"]["runtime_ms"] >= 0
 
@@ -145,34 +126,24 @@ def test_cmd_retrieve_format(monkeypatch):
     assert insp["id"] == "insp-001"
     assert insp["type"] == "Inspiration"
     assert insp["score"] == 0.92
+    assert insp["source"] == "vector"
     assert insp["granularity"] == 1
     assert insp["core_description"] == "基于注意力机制的序列建模范式"
-    assert insp["snippet"] == {
-        "前提条件": "序列长度适中，有足够训练数据",
-        "操作步骤": "1) 计算 self-attention 2) 多头聚合 3) 残差归一化",
-        "已知实例": "Transformer (NeurIPS 2017), BERT (NAACL 2019)",
-    }
-    assert len(insp["chain"]) == 3
-    assert insp["chain"][0]["direction"] == "coarser"
-    assert insp["chain"][1]["direction"] == "self"
-    assert insp["chain"][2]["direction"] == "finer"
+    # 瘦身输出不应包含 snippet / chain / edges
+    assert "snippet" not in insp
+    assert "chain" not in insp
+    assert "edges" not in insp
 
-    assert len(insp["edges"]) == 2
-    assert insp["edges"][0]["type"] == "灵感组合边"
-    assert insp["edges"][0]["target"] == "insp-c77f"
-    assert insp["edges"][0]["target_summary"] == "多尺度特征对齐"
-
-    # Question 节点（无精化链）
+    # Question 节点
     q = result["nodes"][1]
     assert q["id"] == "q-001"
     assert q["type"] == "Question"
+    assert q["source"] == "chain"
     assert q["granularity"] is None
-    assert q["chain"] == []
-    assert q["snippet"] == {
-        "问题类型": "工程瓶颈",
-        "当前现状": "已有稀疏注意力、线性注意力等方法",
-        "未解决部分": "长程依赖与计算效率的平衡仍未彻底解决",
-    }
+    assert q["core_description"] == "长序列注意力计算复杂度过高"
+    assert "snippet" not in q
+    assert "chain" not in q
+    assert "edges" not in q
 
 
 def test_cmd_inspect_inspiration_node(monkeypatch):
