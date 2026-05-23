@@ -7,7 +7,7 @@ import json
 import logging
 
 from src.agent.training import build_training_graph, run_training
-from src.cli.queries import cmd_inspect, cmd_random, cmd_retrieve
+from src.cli.queries import cmd_inspect, cmd_random, cmd_relate, cmd_retrieve
 from src.config import load_config
 from src.llm.client import ChatClient
 from src.neo4j.client import create_client
@@ -67,6 +67,11 @@ def build_parser() -> argparse.ArgumentParser:
     random_.add_argument(
         "--query", type=str, default=None, help="主题过滤，有则在相关范围内随机"
     )
+
+    relate = subparsers.add_parser("relate")
+    relate.add_argument("id_a", help="起始节点 ID")
+    relate.add_argument("id_b", help="目标节点 ID")
+    relate.add_argument("--max_len", type=int, default=6, help="最长路径跳数")
     return parser
 
 
@@ -125,6 +130,15 @@ def main() -> None:
                 neo4j_client,
                 count=args.count,
                 query_text=args.query,
+            )
+            _json_print(result)
+            return
+        if args.command == "relate":
+            result = cmd_relate(
+                neo4j_client,
+                args.id_a,
+                args.id_b,
+                max_len=args.max_len,
             )
             _json_print(result)
             return

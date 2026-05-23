@@ -181,3 +181,55 @@ def random_nodes(
     sample_size = min(count, len(pool))
     sampled = random.sample(list(pool.values()), sample_size)
     return sampled
+
+
+def find_shortest_path(
+    client: Neo4jClient,
+    from_id: str,
+    to_id: str,
+    max_len: int = 6,
+) -> dict[str, Any]:
+    """查找两节点间最短路径。
+
+    单条最短路径，包含路径上的节点摘要和边信息。
+    无路径时返回 {"connected": false}，自指时返回 hops=0。
+    """
+    if from_id == to_id:
+        with client.session() as session:
+            record = session.run(
+                "MATCH (n {id: $node_id}) RETURN n, labels(n)[0] AS type",
+                node_id=from_id,
+            ).single()
+            if not record:
+                return {"connected": False, "reason": "源节点不存在"}
+            raw = dict(record["n"])
+            return {
+                "connected": True,
+                "hops": 0,
+                "node": {
+                    "id": raw["id"],
+                    "type": record["type"],
+                    "core_description": raw.get("核心描述", ""),
+                    "granularity": raw.get("粒度"),
+                },
+            }
+
+    query = f"""
+    MATCH path = shortestPath((a {{id: $from_id}})-[*..{max_len}]-(b {{id: $to_id}}))
+    RETURN [node IN nodes(path) | {{id: node.id, type: labels(node)[0],
+             core_description: node.核心描述, granularity: node.粒度}}] AS nodes,
+           [rel IN relationships(path) | {{type: type(rel), weight: rel.weight}}] AS edges,
+           length(path) AS hops
+    """
+    with client.session() as session:
+        record = session.run(query, from_id=from_id, to_id=to_id).single()  # type: ignore[reportArgumentType]
+
+    if record is None:
+        return {"connected": False, "reason": f"在 max_len={max_len} 内未找到路径"}
+
+    return {
+        "connected": True,
+        "hops": int(record["hops"]),
+        "nodes": [dict(n) for n in (record["nodes"] or [])],
+        "edges": [dict(e) for e in (record["edges"] or [])],
+    }

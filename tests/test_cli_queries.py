@@ -5,7 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from src.cli.queries import cmd_inspect, cmd_random, cmd_retrieve
+from src.cli.queries import cmd_inspect, cmd_random, cmd_relate, cmd_retrieve
 from src.config import Config
 
 FAKE_INSP_NODE = {
@@ -348,3 +348,84 @@ def test_cmd_random_weighted(monkeypatch):
     assert result["mode"] == "random-weighted"
     assert len(result["nodes"]) == 1
     assert result["nodes"][0]["source"] == "random-weighted"
+
+
+def test_cmd_relate_connected(monkeypatch):
+    """验证 cmd_relate 找到路径时返回节点和边。"""
+    path_result = {
+        "connected": True,
+        "hops": 2,
+        "nodes": [
+            {
+                "id": "insp-001",
+                "type": "Inspiration",
+                "core_description": "起点",
+                "granularity": 1,
+            },
+            {
+                "id": "q-001",
+                "type": "Question",
+                "core_description": "中间问题",
+                "granularity": None,
+            },
+            {
+                "id": "insp-002",
+                "type": "Inspiration",
+                "core_description": "终点",
+                "granularity": 2,
+            },
+        ],
+        "edges": [
+            {"type": "INSP_QUESTION", "weight": 0.8},
+            {"type": "QUESTION_COMBINES", "weight": 0.6},
+        ],
+    }
+    monkeypatch.setattr(
+        "src.cli.queries.find_shortest_path", lambda c, f, t, max_len=6: path_result
+    )
+
+    result = cmd_relate(SimpleNamespace(), "insp-001", "insp-002")  # type: ignore[reportArgumentType]
+
+    assert result["connected"] is True
+    assert result["hops"] == 2
+    assert len(result["nodes"]) == 3
+    assert result["nodes"][0]["id"] == "insp-001"
+    assert result["nodes"][2]["id"] == "insp-002"
+    assert len(result["edges"]) == 2
+    assert result["edges"][0]["type"] == "INSP_QUESTION"
+
+
+def test_cmd_relate_disconnected(monkeypatch):
+    """验证 cmd_relate 无路径时返回 disconnected。"""
+    monkeypatch.setattr(
+        "src.cli.queries.find_shortest_path",
+        lambda c, f, t, max_len=6: {"connected": False, "reason": "无路径"},
+    )
+
+    result = cmd_relate(SimpleNamespace(), "insp-001", "q-999")  # type: ignore[reportArgumentType]
+
+    assert result["connected"] is False
+    assert "reason" in result
+
+
+def test_cmd_relate_same_node(monkeypatch):
+    """验证 cmd_relate 两个节点相同时 hops=0。"""
+    path_result = {
+        "connected": True,
+        "hops": 0,
+        "node": {
+            "id": "insp-001",
+            "type": "Inspiration",
+            "core_description": "同节点",
+            "granularity": 1,
+        },
+    }
+    monkeypatch.setattr(
+        "src.cli.queries.find_shortest_path", lambda c, f, t, max_len=6: path_result
+    )
+
+    result = cmd_relate(SimpleNamespace(), "insp-001", "insp-001")  # type: ignore[reportArgumentType]
+
+    assert result["connected"] is True
+    assert result["hops"] == 0
+    assert result["node"]["id"] == "insp-001"

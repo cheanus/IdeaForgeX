@@ -10,6 +10,7 @@ from src.llm.client import ChatClient
 from src.neo4j.client import Neo4jClient
 from src.neo4j.retrieval import (
     expand_refinement_chain,
+    find_shortest_path,
     random_nodes,
     retrieve_with_traversal,
 )
@@ -219,3 +220,15 @@ def cmd_random(
             "runtime_ms": runtime_ms,
         },
     }
+
+
+def cmd_relate(
+    neo4j_client: Neo4jClient,
+    from_id: str,
+    to_id: str,
+    max_len: int = 6,
+) -> dict[str, Any]:
+    t0 = time.monotonic()
+    result = find_shortest_path(neo4j_client, from_id, to_id, max_len)
+    result["meta"] = {"runtime_ms": int((time.monotonic() - t0) * 1000)}
+    return result

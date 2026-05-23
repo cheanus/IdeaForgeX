@@ -175,6 +175,45 @@ CLI 仅暴露知识图谱的**查询层**。生成创新点、多轮交互、论
 
 ---
 
+## `relate` — 路径查询
+
+### 输入
+
+| 参数 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `id_a` | string | ✅ | 起始节点 ID |
+| `id_b` | string | ✅ | 目标节点 ID |
+| `max_len` | int | 否 | 最长路径跳数，默认 6 |
+
+### 输出
+
+```json
+{
+  "connected": true,
+  "hops": 2,
+  "nodes": [
+    {"id": "insp-001", "type": "Inspiration", "core_description": "起点方法", "granularity": 1},
+    {"id": "q-001", "type": "Question", "core_description": "中间问题", "granularity": null},
+    {"id": "insp-002", "type": "Inspiration", "core_description": "终点方法", "granularity": 2}
+  ],
+  "edges": [
+    {"type": "INSP_QUESTION", "weight": 0.8},
+    {"type": "QUESTION_COMBINES", "weight": 0.6}
+  ],
+  "meta": {"runtime_ms": 5}
+}
+```
+
+| 情况 | 输出 |
+|---|---|
+| 路径存在 | `connected: true` + `hops` + `nodes` + `edges` |
+| 无路径 | `connected: false` + `reason` |
+| 同一节点 | `connected: true` + `hops: 0` + `node` |
+
+> 路径上中间节点仅出 `id/type/core_description`（与 `retrieve` 瘦身风格一致），agent 感兴趣再 `inspect`。
+
+---
+
 ## agent 编排示意
 
 ```
