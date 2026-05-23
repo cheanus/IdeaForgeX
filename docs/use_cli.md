@@ -1,15 +1,73 @@
 ## 概述
 
-CLI 仅暴露知识图谱的**查询层**。生成创新点、多轮交互、论文发现等均由外部 agent 框架（如 Hermes Agent）调用 CLI 命令自行编排。
+CLI 暴露知识图谱的**训练层**和**查询层**。训练时通过 `bootstrap` / `train` 构建知识图谱，推理时外部 agent 调用查询命令自行编排创新点生成。
 
-两个核心命令：
+命令一览：
 
-| 命令 | 语义 | 适用场景 |
+| 命令 | 类别 | 语义 |
+|---|---|---|
+| `bootstrap` | 管理 | 初始化 Neo4j schema（约束 + 向量索引） |
+| `reset` | 管理 | 清空实践库（删除所有 Inspiration/Question 节点） |
+| `train` | 训练 | 解析论文 → LLM 提炼灵感/问题 → 写入知识图谱 |
+| `retrieve` | 查询 | 广度优先向量+图检索，返回候选列表 |
+| `inspect` | 查询 | 深度钻取单个节点的全字段 + 精化链 + 边详情 |
+| `random` | 查询 | 随机探索，打破检索排序路径依赖 |
+| `relate` | 查询 | 查找两节点间最短路径 |
+| `stats` | 管理 | 知识图谱统计信息（待接入） |
+
+---
+
+## `bootstrap` — 初始化
+
+```bash
+ideaforgex bootstrap
+```
+
+幂等操作：创建 `Inspiration` / `Question` 标签的 uniqueness 约束，以及 `idx_insp_vector` / `idx_q_vector` 两个余弦向量索引。已存在则跳过。
+
+---
+
+## `reset` — 清空实践库
+
+```bash
+ideaforgex reset
+```
+
+`DETACH DELETE` 所有 Inspiration 和 Question 节点及其关联边。PaperRecord 保留。**不可逆操作。**
+
+---
+
+## `train` — 论文训练
+
+### 输入
+
+| 参数 | 类型 | 必填 | 说明 |
 |---|---|---|---|
-| `retrieve` | 广度优先扫射 | agent 拿到候选列表展示给用户 |
-| `inspect` | 深度优先钻取 | agent 在用户选中某节点后深入理解上下文 |
-| `random` | 随机探索 | agent 做头脑风暴时引入意外发现 |
-| `relate` | 路径查询 | agent 想知道两个节点之间有何联系 |
+| `paper` | string | ✅ | 论文 ID（arXiv ID / AMiner ID）或标题，支持多级降级解析 |
+
+### 流程
+
+1. **获取论文** — arXiv ID 直查 → arXiv 标题搜索（含 PDF 全文降级） → AMiner 语义搜索
+2. **生成检索查询** — LLM 从论文文本中提炼核心研究问题
+3. **图检索** — 向量搜索 + 图遍历，查找相关节点
+4. **LLM 分析** — 判断论文是否可提炼新灵感/问题，并生成候选节点 + 边 + 节点更新
+5. **提交** — 可提炼时写入新节点和边，并更新已有节点；不可提炼时仅记录论文
+
+### 输出
+
+无标准输出（写入 Neo4j）。通过 `LOG_LEVEL=INFO` 查看阶段日志。
+
+---
+
+## `stats` — 图谱统计
+
+```bash
+ideaforgex stats
+```
+
+（待接入）计划输出：Inspiration 数、Question 数、总边数、各粒度分布。
+
+---
 
 ---
 
@@ -168,9 +226,9 @@ CLI 仅暴露知识图谱的**查询层**。生成创新点、多轮交互、论
 
 | | `retrieve` | `inspect` |
 |---|---|---|
-| 节点字段 | `core_description` + 折叠 `snippet` | 全字段展开 |
-| 边的 `target` | 仅 `target_summary`（字符串） | 展开为 mini-inspect（id / type / core_description / 关键字段） |
-| `chain` 格式 | 统一列表（同格式） | 统一列表（同格式） |
+| 节点字段 | 仅 `id` + `type` + `score` + `source` + `core_description`（瘦身） | 全字段展开（前提条件 / 操作步骤 / 已知实例 / 问题类型 / 当前现状 / 未解决部分） |
+| `chain` | ❌ | ✅ 精化链（coarser / self / finer） |
+| `edges` | ❌ | ✅ 展开为 mini-inspect（target 含 id / type / core_description / 关键字段） |
 | `score` | ✅ | ❌（不关心如何被搜出） |
 
 ---
@@ -217,14 +275,30 @@ CLI 仅暴露知识图谱的**查询层**。生成创新点、多轮交互、论
 ## agent 编排示意
 
 ```
+# 训练阶段（运维）
+$ ideaforgex bootstrap          # 首次初始化
+$ ideaforgex train 1706.03762   # 训练 Attention Is All You Need
+$ ideaforgex train ViT           # 训练 ViT
+$ ideaforgex stats               # 查看图谱规模
+
+# 推理阶段（agent 编排）
 用户：「我有篇论文摘要……帮我找创新方向」
   → agent 调 retrieve(query=摘要) → 拿到 top-15 节点（仅 id + core_description + source）
   → agent 展示节点列表给用户确认/过滤
   → 用户：「第三个节点的精化链里更细那个具体怎么做？」
   → agent 调 inspect(id=insp-1d9e...) → 展开全字段
-  → 用户：「把节点 A 和 B 组合一下，用类比推理范式」
+
+用户：「我还想看一些意外的关联」
+  → agent 调 random(count=5) → 拿到 5 个随机节点作为灵感种子
+  → agent 调 random(query="domain generalization") → 在相关范围内随机探索
+
+用户：「节点 A 和节点 B 之间有什么联系？」
+  → agent 调 relate(id_a=..., id_b=...) → 最短路径 + 中间节点
+
+用户：「把节点 A 和 B 组合一下，用类比推理范式」
+  → agent 调 inspect(id=A), inspect(id=B) → 获取全字段
   → agent 自己调 LLM 基于两个节点的全字段信息生成候选创新点
   → 循环，直到满意
 ```
 
-CLI 只负责查询。范式调用、创新点生成、文献查重、多轮纠偏——全部由外部 agent 完成。
+CLI 只负责训练和查询。范式调用、创新点生成、文献查重、多轮纠偏——全部由外部 agent 完成。
