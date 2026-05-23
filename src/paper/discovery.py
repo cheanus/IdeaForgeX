@@ -28,9 +28,9 @@ class AMinerClient:
 
     def search_papers(self, query: str, limit: int = 50) -> list[dict[str, Any]]:
         response = httpx.post(
-            f"{self.base_url}/api/paper/qa/search",
+            f"{self.base_url}/api/paper/search",
             headers=self.headers,
-            json={"use_topic": False, "query": query, "size": limit, "sci_flag": True},
+            json={"page": 1, "size": limit, "title": query},
             timeout=30.0,
         )
         response.raise_for_status()
