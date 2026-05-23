@@ -116,7 +116,7 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
         )
         _logger.info(
             "LLM 分析完成，%s",
-            "可提炼新节点" if payload.can_infer else "无可提炼内容，跳过提交",
+            "需要提取新节点" if not payload.can_infer else "可直接推断，无需提取",
         )
         return {
             "llm_a": payload.model_dump(),
@@ -132,8 +132,8 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
 
     def commit_candidates(state: TrainingState) -> dict:
         can_infer = state.get("can_infer", False)
-        if not can_infer:
-            _logger.info("无可提炼内容，跳过新节点提交")
+        if can_infer:
+            _logger.info("可直接推断，无需提取新节点")
             return {}
         _logger.info("正在提交候选人到图谱 …")
         inspirations = [

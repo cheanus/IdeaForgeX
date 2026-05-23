@@ -50,7 +50,7 @@ def _mock_try_reserve_dup(monkeypatch):
 def test_training_graph_routes_can_infer_to_commit_candidates(
     monkeypatch, neo4j_client
 ):
-    """验证 can_infer=True 时走 commit_candidates 路径并标记论文。"""
+    """验证 can_infer=True（可直接推断）时不创建节点。"""
     config = Config(
         neo4j_database="neo4j",
         arxiv_short_abstract_threshold=200,
@@ -76,7 +76,6 @@ def test_training_graph_routes_can_infer_to_commit_candidates(
         raise RuntimeError(f"unexpected parser: {parser}")
 
     monkeypatch.setattr("src.agent.training.call_with_retry", fake_call_with_retry)
-    _mock_try_reserve_ok(monkeypatch)
 
     resolved_id = None
 
@@ -104,8 +103,8 @@ def test_training_graph_routes_can_infer_to_commit_candidates(
 
 
 @pytest.mark.neo4j
-def test_training_graph_commits_candidates_when_can_infer(monkeypatch, neo4j_client):
-    """验证 can_infer=True 时走 commit_candidates 路径并写入节点和关系。"""
+def test_training_graph_commits_candidates_when_cannot_infer(monkeypatch, neo4j_client):
+    """验证 can_infer=False（需要提取）时走 commit_candidates 路径并写入节点和关系。"""
     config = Config(
         neo4j_database="neo4j",
         arxiv_short_abstract_threshold=200,
@@ -126,7 +125,7 @@ def test_training_graph_commits_candidates_when_can_infer(monkeypatch, neo4j_cli
             return {"query_text": "attention mechanism"}
         if parser is parse_llm_a_candidate:
             return LLMACandidate(
-                can_infer=True,
+                can_infer=False,
                 inspiration_nodes=[
                     InspirationNode(
                         id="I1", 核心描述="test insp", 向量=_zero_vector(dim)
@@ -155,7 +154,7 @@ def test_training_graph_commits_candidates_when_can_infer(monkeypatch, neo4j_cli
         {"configurable": {"thread_id": TEST_PAPER_ID}},
     )
 
-    assert result["can_infer"] is True
+    assert result["can_infer"] is False
     resolved_id = result.get("paper_id")
     assert resolved_id is not None
 
@@ -215,7 +214,7 @@ def test_training_graph_commits_node_updates(monkeypatch, neo4j_client):
             return {"query_text": "attention"}
         if parser is parse_llm_a_candidate:
             return LLMACandidate(
-                can_infer=True,
+                can_infer=False,
                 node_updates=[  # type: ignore[reportArgumentType]
                     {"node_id": "insp-existing", "已知实例": "new example from paper"}
                 ],
@@ -231,7 +230,7 @@ def test_training_graph_commits_node_updates(monkeypatch, neo4j_client):
         {"configurable": {"thread_id": TEST_PAPER_ID}},
     )
 
-    assert result["can_infer"] is True
+    assert result["can_infer"] is False
 
     with neo4j_client.driver.session(
         database=neo4j_client.config.neo4j_database

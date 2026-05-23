@@ -75,8 +75,8 @@ def check_duplicate(state):
 
 ```python
 def commit_candidates(state):
-    if not state.get("can_infer"):
-        return {}          # LLM 判断不可提炼，跳过提交
+    if state.get("can_infer"):
+        return {}          # True=可直接推断，无需提取新知识
     # LLM 生成的节点 ID 加 paper_id 前缀防并发冲突
     prefix = f"{paper_id}__"
     for node in inspirations + questions:
