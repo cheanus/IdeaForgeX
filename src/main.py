@@ -120,6 +120,14 @@ def main() -> None:
             _logger.info("检索完成，返回 %d 条", result["meta"]["total_hits"])
             _json_print(result)
             return
+        if args.command == "inspect":
+            result = cmd_inspect(
+                neo4j_client,
+                args.id,
+                expand_edges=args.expand_edges,
+            )
+            _json_print(result)
+            return
         if args.command == "random":
             _logger.info("随机探索，模式=%s", "主题加权" if args.query else "纯随机")
             result = cmd_random(

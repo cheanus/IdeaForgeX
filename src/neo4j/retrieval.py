@@ -25,7 +25,7 @@ def _vector_query_cypher(index_name: str) -> str:
                 FOR $embedding
                 LIMIT $k
             ) SCORE AS score
-            RETURN node, score
+            RETURN node, labels(node)[0] AS node_type, score
             ORDER BY score DESC
         """
     if index_name == "idx_q_vector":
@@ -36,7 +36,7 @@ def _vector_query_cypher(index_name: str) -> str:
                 FOR $embedding
                 LIMIT $k
             ) SCORE AS score
-            RETURN node, score
+            RETURN node, labels(node)[0] AS node_type, score
             ORDER BY score DESC
         """
     raise ValueError(f"不支持的向量索引: {index_name}")
@@ -52,7 +52,10 @@ def vector_search(
             embedding=query_embedding,
         )
         return [
-            RetrievalHit(node=dict(record["node"]), score=float(record["score"]))
+            RetrievalHit(
+                node=dict(record["node"]) | {"type": record.get("node_type", "")},
+                score=float(record["score"]),
+            )
             for record in result
         ]
 
@@ -65,11 +68,14 @@ def expand_refinement_chain(client: Neo4jClient, hit_id: str) -> list[dict[str, 
         UNION
         MATCH (coarser:Inspiration)-[:INSP_REFINES*0..10]->(hit) RETURN coarser AS finer
     }
-    RETURN DISTINCT finer
+    RETURN DISTINCT finer, labels(finer)[0] AS node_type
     """
     with client.session() as session:
         result = session.run(query, hit_id=hit_id)
-        return [dict(record["finer"]) for record in result]
+        return [
+            dict(record["finer"]) | {"type": record.get("node_type", "")}
+            for record in result
+        ]
 
 
 def hop_expand(
@@ -78,14 +84,17 @@ def hop_expand(
     query = """
     MATCH (n {id: $node_id})-[r]-(m)
     WHERE type(r) IN ['INSP_COMBINES','INSP_QUESTION','QUESTION_COMBINES']
-    RETURN m, r.weight AS weight
+    RETURN m, labels(m)[0] AS node_type, r.weight AS weight
     ORDER BY weight DESC
     LIMIT $max_neighbors
     """
     with client.session() as session:
         result = session.run(query, node_id=node_id, max_neighbors=max_neighbors)
         return [
-            {"node": dict(record["m"]), "weight": float(record["weight"])}
+            {
+                "node": dict(record["m"]) | {"type": record.get("node_type", "")},
+                "weight": float(record["weight"]),
+            }
             for record in result
         ]
 

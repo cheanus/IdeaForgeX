@@ -63,7 +63,7 @@ class FakeLLMClient:
         return [[0.1, 0.2, 0.3]]
 
 
-def _make_fake_neo4j_session(single_result: dict | None):
+def _make_fake_neo4j_session(single_result: dict | None, node_type: str = ""):
     """构建一个兼容 context manager 的 mock session。"""
 
     class FakeRecord:
@@ -73,12 +73,17 @@ def _make_fake_neo4j_session(single_result: dict | None):
         def __getitem__(self, key):
             return self._wrapped[key]
 
+        def get(self, key, default=None):
+            return self._wrapped.get(key, default)
+
         def data(self):
             return self._wrapped
 
     session = MagicMock()
     if single_result is not None:
-        session.run.return_value.single.return_value = FakeRecord({"n": single_result})
+        session.run.return_value.single.return_value = FakeRecord(
+            {"n": single_result, "node_type": node_type}
+        )
     else:
         session.run.return_value.single.return_value = None
     return session
@@ -148,7 +153,7 @@ def test_cmd_retrieve_format(monkeypatch):
 
 def test_cmd_inspect_inspiration_node(monkeypatch):
     """验证 inspect 对 Inspiration 节点输出全字段。"""
-    session = _make_fake_neo4j_session(FAKE_INSP_NODE)
+    session = _make_fake_neo4j_session(FAKE_INSP_NODE, "Inspiration")
     fake_neo4j = SimpleNamespace(session=_make_fake_neo4j_client_ctx(session))
 
     monkeypatch.setattr(
@@ -181,7 +186,7 @@ def test_cmd_inspect_inspiration_node(monkeypatch):
 
 def test_cmd_inspect_question_node(monkeypatch):
     """验证 inspect 对 Question 节点输出全字段。"""
-    session = _make_fake_neo4j_session(FAKE_QUESTION_NODE)
+    session = _make_fake_neo4j_session(FAKE_QUESTION_NODE, "Question")
     fake_neo4j = SimpleNamespace(session=_make_fake_neo4j_client_ctx(session))
 
     monkeypatch.setattr("src.cli.queries._get_edges_for_node", lambda c, nid: [])
@@ -202,7 +207,7 @@ def test_cmd_inspect_question_node(monkeypatch):
 
 def test_cmd_inspect_edges_expanded(monkeypatch):
     """验证 inspect 展开边时 target 为 mini-inspect 格式。"""
-    session = _make_fake_neo4j_session(FAKE_INSP_NODE)
+    session = _make_fake_neo4j_session(FAKE_INSP_NODE, "Inspiration")
     fake_neo4j = SimpleNamespace(session=_make_fake_neo4j_client_ctx(session))
 
     monkeypatch.setattr(

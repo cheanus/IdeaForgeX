@@ -58,7 +58,7 @@ def _get_edges_for_node(client: Neo4jClient, node_id: str) -> list[dict[str, Any
     query = """
     MATCH (n {id: $node_id})-[r]-(m)
     WHERE type(r) IN ['INSP_COMBINES','INSP_QUESTION','QUESTION_COMBINES']
-    RETURN type(r) AS rel_type, r.weight AS weight, m AS target
+    RETURN type(r) AS rel_type, r.weight AS weight, m AS target, labels(m)[0] AS target_type
     ORDER BY weight DESC
     """
     with client.session() as session:
@@ -67,7 +67,8 @@ def _get_edges_for_node(client: Neo4jClient, node_id: str) -> list[dict[str, Any
             {
                 "type": record["rel_type"],
                 "weight": float(record["weight"]),
-                "target": dict(record["target"]),
+                "target": dict(record["target"])
+                | {"type": record.get("target_type", "")},
             }
             for record in result
         ]
@@ -143,12 +144,13 @@ def cmd_inspect(
     for node_id in node_ids:
         with neo4j_client.session() as session:
             record = session.run(
-                "MATCH (n {id: $node_id}) RETURN n", node_id=node_id
+                "MATCH (n {id: $node_id}) RETURN n, labels(n)[0] AS node_type",
+                node_id=node_id,
             ).single()
             if not record:
                 results.append({"id": node_id, "error": "节点不存在"})
                 continue
-            raw_node = dict(record["n"])
+            raw_node = dict(record["n"]) | {"type": record.get("node_type", "")}
 
         type_label = raw_node.get("type", "")
         node: dict[str, Any] = {
