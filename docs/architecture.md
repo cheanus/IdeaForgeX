@@ -71,13 +71,13 @@ flowchart TD
 外部 agent 加载论文 → CLI retrieve → CLI inspect → agent 调 LLM 生成创新点
 ```
 
-两个核心 CLI 命令：`retrieve`（广度优先检索）和 `inspect`（节点深度详情）。详见 `docs/use_cli.md`。
+CLI 查询命令包括 `retrieve`、`inspect`、`random`、`relate`。详见 `docs/use_cli.md`。
 
 ## 6. 检索遍历
 
-5 阶段策略：向量搜索(Inspiration+Question) → 精化链双向展开 → 1-hop 扩展 → 2-hop 扩展 → 去重截断。
+5 阶段策略：向量搜索(Inspiration+Question) → 精化链双向展开 → BFS 图扩展(可配深度) → 去重按分数截断。
 
-扩展开销由 `k_hits`、`max_neighbors`、`max_depth`、`score_decay` 控制，全部可配置。
+扩展开销由 `k_hits`、`max_neighbors`、`max_depth`、`score_decay`、`final_k` 控制，全部可配置（默认值见 `config.example.yaml`）。
 
 ## 7. LLM 调用
 

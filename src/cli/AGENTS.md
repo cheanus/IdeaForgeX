@@ -4,12 +4,14 @@
 
 CLI 暴露知识图谱的查询层。生成创新点、多轮交互、论文发现等均由外部 agent 框架调用 CLI 命令自行编排。
 
-两个核心命令：
+四个查询命令：
 
 | 命令 | 语义 | 适用场景 |
 |---|---|---|
-| `retrieve` | 广度优先扫射 | agent 拿到候选列表展示给用户 |
+| `retrieve` | 广度优先向量+图检索 | agent 拿到候选列表展示给用户 |
 | `inspect` | 深度优先钻取 | agent 在用户选中某节点后深入理解上下文 |
+| `random` | 随机探索 | agent 做头脑风暴时引入意外发现 |
+| `relate` | 路径查询 | agent 想知道两个节点之间有何联系 |
 
 ## 输出格式
 
@@ -27,33 +29,40 @@ CLI 暴露知识图谱的查询层。生成创新点、多轮交互、论文发�
 
 ### retrieve 输出
 
-检索结果包含折叠视图，减少 agent 首次解析的 token 量：
+瘦身格式，仅含节点识别信息和检索质量元数据。agent 根据 `core_description` 和 `source` 判断哪些节点值得深入，再通过 `inspect` 获取全字段 + 精化链 + 边详情：
 
-- `core_description`：节点核心描述，agent 第一眼看节点靠它
-- `snippet`：折叠次要字段，供 agent 判断方向价值
-- `chain`：内联精化链，`direction` 标注 self/coarser/finer
-- `edges.target_summary`：边目标仅给摘要字符串，agent 感兴趣再 `inspect`
-- `meta.total_hits`：检索命中总数，agent 据此判断检索质量
+- `id` / `type` / `score` / `source` / `granularity` / `core_description` — 节点核心字段
+- `source` — 来源标记：`vector`(向量命中)、`chain`(精化链展开)、`1-hop`/`2-hop`(图扩展)，agent 据此加权信任度
+- `meta.total_hits` — 检索命中总数，agent 据此判断检索质量
 
 ### inspect 输出
 
 节点/边全字段展开：
 
 - 节点所有属性完整输出
+- `chain` — 内联精化链（按粒度升序），`direction` 标注 self/coarser/finer
 - 边的 `target` 展开为 mini-inspect（id / type / core_description / 关键字段）
+
+### random 输出
+
+与 `retrieve` 瘦身格式一致，`source` 标记为 `random`（纯随机）或 `random-weighted`（主题加权）。顶层多一个 `mode` 字段。
+
+### relate 输出
+
+`connected` 布尔值 + 路径节点序列（id / type / core_description）+ 边序列 + `hops`。无路径时返回 `reason`。
 
 ## 文件职责
 
 | 文件 | 职责 |
 |---|---|
-| `queries.py` | `cmd_retrieve` / `cmd_inspect` 函数实现 + 输出格式化 |
+| `queries.py` | `cmd_retrieve` / `cmd_inspect` / `cmd_random` / `cmd_relate` 函数实现 + 输出格式化 |
 
 ## 实现约定
 
 - 格式化逻辑与数据获取分离。数据获取复用 `src/neo4j/retrieval.py`。
-- 边查询使用批量 Cypher，避免 N+1 查询。
-- `snippet` 字段根据节点类型选择字段集（Inspiration: 前提条件/操作步骤/已知实例；Question: 问题类型/当前现状/未解决部分）。
+- 节点 type 由 Neo4j 标签确定（`labels(n)[0]`），不依赖属性字段。
 - 精化链按粒度升序排列，`direction` 通过比较粒度确定。
+- `random` 命令通过 `random_nodes()` 处理纯随机和主题加权两种模式。
 
 ## 重试与错误
 

@@ -80,7 +80,7 @@ flowchart TD
     G --> O["返回创新点 (不写入 Neo4j)"]
 ```
 
-CLI 只负责查询（`retrieve` / `inspect`）。范式调用、创新点生成、文献查重、多轮纠偏全部由外部 agent 完成。详见 `docs/use_cli.md`。
+CLI 只负责查询（`retrieve` / `inspect` / `random` / `relate`）。范式调用、创新点生成、文献查重、多轮纠偏全部由外部 agent 完成。详见 `docs/use_cli.md`。
 
 ## 7. LLM 角色
 
