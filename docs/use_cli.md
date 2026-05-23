@@ -5,9 +5,11 @@ CLI 仅暴露知识图谱的**查询层**。生成创新点、多轮交互、论
 两个核心命令：
 
 | 命令 | 语义 | 适用场景 |
-|---|---|---|
+|---|---|---|---|
 | `retrieve` | 广度优先扫射 | agent 拿到候选列表展示给用户 |
 | `inspect` | 深度优先钻取 | agent 在用户选中某节点后深入理解上下文 |
+| `random` | 随机探索 | agent 做头脑风暴时引入意外发现 |
+| `relate` | 路径查询 | agent 想知道两个节点之间有何联系 |
 
 ---
 
@@ -76,6 +78,42 @@ CLI 仅暴露知识图谱的**查询层**。生成创新点、多轮交互、论
 | `nodes[].core_description` | 该节点核心描述文本，agent 第一眼看节点就靠它 |
 | `meta.total_hits` | 检索命中总数，agent 据此判断检索质量 |
 | `meta.runtime_ms` | 检索耗时（毫秒） |
+
+---
+
+## `random` — 随机探索
+
+### 输入
+
+| 参数 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `count` | int | 否 | 返回节点数，默认 5 |
+| `query` | string | 否 | 有则主题加权随机（向量检索 top 50 后随机抽样），无则全图均匀随机 |
+
+### 输出
+
+与 `retrieve` 瘦身格式一致，`source` 标记为 `random` 或 `random-weighted`。
+
+```json
+{
+  "mode": "random",
+  "nodes": [
+    {
+      "id": "insp-7a2b...",
+      "type": "Inspiration",
+      "source": "random",
+      "granularity": 2,
+      "core_description": "多模态融合中的注意力对齐"
+    }
+  ],
+  "meta": {
+    "total_hits": 5,
+    "runtime_ms": 12
+  }
+}
+```
+
+> `random` 的目的是打破检索排序的路径依赖，为 brainstorm 引入意外发现。agent 应把随机结果视为"灵感种子"而非精确答案。
 
 ---
 

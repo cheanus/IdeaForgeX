@@ -7,7 +7,7 @@ import json
 import logging
 
 from src.agent.training import build_training_graph, run_training
-from src.cli.queries import cmd_inspect, cmd_retrieve
+from src.cli.queries import cmd_inspect, cmd_random, cmd_retrieve
 from src.config import load_config
 from src.llm.client import ChatClient
 from src.neo4j.client import create_client
@@ -61,6 +61,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     subparsers.add_parser("stats")
+
+    random_ = subparsers.add_parser("random")
+    random_.add_argument("--count", type=int, default=5, help="返回节点数")
+    random_.add_argument(
+        "--query", type=str, default=None, help="主题过滤，有则在相关范围内随机"
+    )
     return parser
 
 
@@ -109,6 +115,16 @@ def main() -> None:
                 neo4j_client,
                 args.id,
                 expand_edges=args.expand_edges,
+            )
+            _json_print(result)
+            return
+        if args.command == "random":
+            result = cmd_random(
+                config,
+                llm_client,
+                neo4j_client,
+                count=args.count,
+                query_text=args.query,
             )
             _json_print(result)
             return

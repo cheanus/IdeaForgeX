@@ -5,7 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from src.cli.queries import cmd_inspect, cmd_retrieve
+from src.cli.queries import cmd_inspect, cmd_random, cmd_retrieve
 from src.config import Config
 
 FAKE_INSP_NODE = {
@@ -283,3 +283,68 @@ def test_cmd_inspect_comma_separated_ids(monkeypatch):
     assert len(results) == 2
     assert results[0]["node"]["id"] == "insp-001"
     assert results[1]["node"]["id"] == "q-001"
+
+
+def test_cmd_random_pure(monkeypatch):
+    """验证 cmd_random 纯随机模式（无 --query）。"""
+    config = Config()
+
+    fake_nodes = [
+        {
+            "id": "insp-r1",
+            "type": "Inspiration",
+            "core_description": "随机灵感",
+            "granularity": 1,
+            "source": "random",
+        },
+    ]
+
+    monkeypatch.setattr(
+        "src.cli.queries.random_nodes",
+        lambda client, count, embedding=None: fake_nodes[:count],
+    )
+
+    result = cmd_random(
+        config,
+        FakeLLMClient(),  # type: ignore[reportArgumentType]
+        SimpleNamespace(),  # type: ignore[reportArgumentType]
+        count=1,
+    )
+
+    assert result["mode"] == "random"
+    assert len(result["nodes"]) == 1
+    assert result["nodes"][0]["source"] == "random"
+    assert result["nodes"][0]["core_description"] == "随机灵感"
+    assert result["meta"]["total_hits"] == 1
+
+
+def test_cmd_random_weighted(monkeypatch):
+    """验证 cmd_random 主题加权随机模式（有 --query）。"""
+    config = Config()
+
+    fake_nodes = [
+        {
+            "id": "insp-rw1",
+            "type": "Inspiration",
+            "core_description": "主题相关灵感",
+            "granularity": 2,
+            "source": "random-weighted",
+        },
+    ]
+
+    monkeypatch.setattr(
+        "src.cli.queries.random_nodes",
+        lambda client, count, embedding=None: fake_nodes[:count],
+    )
+
+    result = cmd_random(
+        config,
+        FakeLLMClient(),  # type: ignore[reportArgumentType]
+        SimpleNamespace(),  # type: ignore[reportArgumentType]
+        count=1,
+        query_text="扩散模型",
+    )
+
+    assert result["mode"] == "random-weighted"
+    assert len(result["nodes"]) == 1
+    assert result["nodes"][0]["source"] == "random-weighted"

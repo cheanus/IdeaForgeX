@@ -8,7 +8,11 @@ from typing import Any
 from src.config import Config
 from src.llm.client import ChatClient
 from src.neo4j.client import Neo4jClient
-from src.neo4j.retrieval import expand_refinement_chain, retrieve_with_traversal
+from src.neo4j.retrieval import (
+    expand_refinement_chain,
+    random_nodes,
+    retrieve_with_traversal,
+)
 
 EDGE_TYPE_LABELS: dict[str, str] = {
     "INSP_COMBINES": "灵感组合边",
@@ -188,3 +192,30 @@ def cmd_inspect(
         )
 
     return results
+
+
+def cmd_random(
+    config: Config,
+    llm_client: ChatClient,
+    neo4j_client: Neo4jClient,
+    count: int = 5,
+    query_text: str | None = None,
+) -> dict[str, Any]:
+    t0 = time.monotonic()
+
+    query_embedding: list[float] | None = None
+    if query_text:
+        query_embedding = llm_client.embed([query_text])[0]
+
+    nodes = random_nodes(neo4j_client, count, query_embedding)
+
+    runtime_ms = int((time.monotonic() - t0) * 1000)
+
+    return {
+        "mode": "random-weighted" if query_text else "random",
+        "nodes": nodes,
+        "meta": {
+            "total_hits": len(nodes),
+            "runtime_ms": runtime_ms,
+        },
+    }

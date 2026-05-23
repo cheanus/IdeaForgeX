@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass
 from typing import Any
 
@@ -133,3 +134,50 @@ def retrieve_with_traversal(
 
     ranked = sorted(candidates.values(), key=lambda item: item["score"], reverse=True)
     return ranked[: config.final_k]
+
+
+def random_nodes(
+    client: Neo4jClient,
+    count: int,
+    query_embedding: list[float] | None = None,
+    pool_size: int = 50,
+) -> list[dict[str, Any]]:
+    """从图中随机取 N 个节点。
+
+    有 query_embedding 时先向量检索 pool_size 个候选再从中随机抽样；
+    无则全图均匀随机。
+    """
+    if query_embedding is None:
+        query = "MATCH (n) RETURN n, labels(n)[0] AS type ORDER BY rand() LIMIT $count"
+        with client.session() as session:
+            result = session.run(query, count=count)
+            nodes = []
+            for record in result:
+                raw = dict(record["n"])
+                nodes.append(
+                    {
+                        "id": raw["id"],
+                        "type": record["type"],
+                        "core_description": raw.get("核心描述", ""),
+                        "granularity": raw.get("粒度"),
+                        "source": "random",
+                    }
+                )
+            return nodes
+
+    pool: dict[str, dict[str, Any]] = {}
+    for index_name in ("idx_insp_vector", "idx_q_vector"):
+        for hit in vector_search(client, index_name, query_embedding, pool_size):
+            node = hit.node
+            if node["id"] not in pool:
+                pool[node["id"]] = {
+                    "id": node["id"],
+                    "type": node.get("type", ""),
+                    "core_description": node.get("核心描述", ""),
+                    "granularity": node.get("粒度"),
+                    "source": "random-weighted",
+                }
+
+    sample_size = min(count, len(pool))
+    sampled = random.sample(list(pool.values()), sample_size)
+    return sampled
