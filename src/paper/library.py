@@ -43,10 +43,14 @@ class PaperLibrary:
             ).fetchone()
             return row is not None
 
-    def add(self, paper_id: str, title: str, year: str = "") -> None:
+    def try_reserve(self, paper_id: str, title: str, year: str = "") -> bool:
+        """原子操作：尝试预留论文记录。返回 True 表示新记录已写入，可继续训练。"""
         with self._connect() as conn:
-            conn.execute(
-                "INSERT INTO papers (paper_id, title, year) VALUES (?, ?, ?)",
+            cursor = conn.execute(
+                "INSERT OR IGNORE INTO papers (paper_id, title, year) VALUES (?, ?, ?)",
                 (paper_id, title, year or ""),
             )
-        _logger.info("标记论文已训练: %s", paper_id)
+            reserved = cursor.rowcount > 0
+        if reserved:
+            _logger.info("标记论文已训练: %s", paper_id)
+        return reserved

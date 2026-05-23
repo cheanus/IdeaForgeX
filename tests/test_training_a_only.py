@@ -26,25 +26,31 @@ def _zero_vector(dim: int) -> list[float]:
     return [0.0] * dim
 
 
-def _mock_paper_library(monkeypatch):
-    """使论文库始终返回 False（未训练），不阻断训练流程。"""
+def _prefix_id(paper_id: str, node_id: str) -> str:
+    return f"{paper_id}__{node_id}"
+
+
+def _mock_try_reserve_ok(monkeypatch):
+    """模拟 try_reserve 每次都成功（返回 True），正常走训练流程。"""
     monkeypatch.setattr(
-        "src.agent.training.PaperLibrary.is_trained", lambda self, paper_id: False
+        "src.agent.training.PaperLibrary.try_reserve",
+        lambda self, paper_id, title, year="": True,
     )
-    add_called: list[tuple] = []
 
-    def fake_add(self, paper_id, title, year=""):
-        add_called.append((paper_id, title, year))
 
-    monkeypatch.setattr("src.agent.training.PaperLibrary.add", fake_add)
-    return add_called
+def _mock_try_reserve_dup(monkeypatch):
+    """模拟 try_reserve 返回 False（已训练），触发跳过逻辑。"""
+    monkeypatch.setattr(
+        "src.agent.training.PaperLibrary.try_reserve",
+        lambda self, paper_id, title, year="": False,
+    )
 
 
 @pytest.mark.neo4j
 def test_training_graph_routes_can_infer_to_commit_candidates(
     monkeypatch, neo4j_client
 ):
-    """验证 can_infer=True 时走 commit_candidates → mark_trained 路径。"""
+    """验证 can_infer=True 时走 commit_candidates 路径并标记论文。"""
     config = Config(
         neo4j_database="neo4j",
         arxiv_short_abstract_threshold=200,
@@ -70,7 +76,16 @@ def test_training_graph_routes_can_infer_to_commit_candidates(
         raise RuntimeError(f"unexpected parser: {parser}")
 
     monkeypatch.setattr("src.agent.training.call_with_retry", fake_call_with_retry)
-    add_called = _mock_paper_library(monkeypatch)
+    _mock_try_reserve_ok(monkeypatch)
+
+    resolved_id = None
+
+    def track_resolve(self, paper_id, title, year=""):
+        nonlocal resolved_id
+        resolved_id = paper_id
+        return True
+
+    monkeypatch.setattr("src.agent.training.PaperLibrary.try_reserve", track_resolve)
 
     graph = build_training_graph(config, FakeEmbeddingClient(), neo4j_client)  # type: ignore[reportArgumentType]
     result = graph.invoke(
@@ -78,19 +93,14 @@ def test_training_graph_routes_can_infer_to_commit_candidates(
         {"configurable": {"thread_id": TEST_PAPER_ID}},
     )
 
-    resolved_id = result.get("paper_id")
-    assert resolved_id is not None
+    assert result.get("paper_id") is not None
     assert result["paper_title"] == ATTENTION_TITLE
     assert result["paper_text"] == ATTENTION_ABSTRACT
     assert result["can_infer"] is True
     assert result.get("already_trained") is False
     assert len(result["retrieved_nodes"]) == 1
     assert call_count[0] == 2
-
-    # 验证 mark_trained 节点调用了 PaperLibrary.add
-    assert len(add_called) == 1
-    assert add_called[0][0] == resolved_id
-    assert add_called[0][1] == ATTENTION_TITLE
+    assert resolved_id is not None
 
 
 @pytest.mark.neo4j
@@ -119,16 +129,16 @@ def test_training_graph_commits_candidates_when_can_infer(monkeypatch, neo4j_cli
                 can_infer=True,
                 inspiration_nodes=[
                     InspirationNode(
-                        id="i1", 核心描述="test insp", 向量=_zero_vector(dim)
+                        id="I1", 核心描述="test insp", 向量=_zero_vector(dim)
                     )
                 ],
                 question_nodes=[
-                    QuestionNode(id="q1", 核心描述="test q", 向量=_zero_vector(dim))
+                    QuestionNode(id="Q1", 核心描述="test q", 向量=_zero_vector(dim))
                 ],
                 edges=[
                     Edge(
-                        from_id="i1",
-                        to_id="q1",
+                        from_id="I1",
+                        to_id="Q1",
                         rel_type=RelationType.insp_question,
                         weight=0.8,
                     )
@@ -137,7 +147,7 @@ def test_training_graph_commits_candidates_when_can_infer(monkeypatch, neo4j_cli
         raise RuntimeError(f"unexpected parser: {parser}")
 
     monkeypatch.setattr("src.agent.training.call_with_retry", fake_call_with_retry)
-    add_called = _mock_paper_library(monkeypatch)
+    _mock_try_reserve_ok(monkeypatch)
 
     graph = build_training_graph(config, FakeEmbeddingClient(), neo4j_client)  # type: ignore[reportArgumentType]
     result = graph.invoke(
@@ -146,6 +156,8 @@ def test_training_graph_commits_candidates_when_can_infer(monkeypatch, neo4j_cli
     )
 
     assert result["can_infer"] is True
+    resolved_id = result.get("paper_id")
+    assert resolved_id is not None
 
     with neo4j_client.driver.session(
         database=neo4j_client.config.neo4j_database
@@ -158,15 +170,13 @@ def test_training_graph_commits_candidates_when_can_infer(monkeypatch, neo4j_cli
         assert q_count == 1
 
         edge_record = session.run(
-            "MATCH (a:Inspiration {id: 'i1'})-[r:INSP_QUESTION]->(b:Question {id: 'q1'}) "
+            f"MATCH (a:Inspiration {{id: '{_prefix_id(resolved_id, 'I1')}'}})"
+            f"-[r:INSP_QUESTION]->"
+            f"(b:Question {{id: '{_prefix_id(resolved_id, 'Q1')}'}}) "
             "RETURN r.weight AS w"
         ).single()
         assert edge_record is not None
         assert edge_record["w"] == 0.8
-
-    # 验证 mark_trained 被调用
-    assert len(add_called) == 1
-    assert add_called[0][0] == result.get("paper_id")
 
 
 @pytest.mark.neo4j
@@ -213,7 +223,7 @@ def test_training_graph_commits_node_updates(monkeypatch, neo4j_client):
         raise RuntimeError(f"unexpected parser: {parser}")
 
     monkeypatch.setattr("src.agent.training.call_with_retry", fake_call_with_retry)
-    _mock_paper_library(monkeypatch)
+    _mock_try_reserve_ok(monkeypatch)
 
     graph = build_training_graph(config, FakeEmbeddingClient(), neo4j_client)  # type: ignore[reportArgumentType]
     result = graph.invoke(
@@ -230,7 +240,6 @@ def test_training_graph_commits_node_updates(monkeypatch, neo4j_client):
             "MATCH (n:Inspiration {id: 'insp-existing'}) RETURN n.已知实例 AS ex"
         ).data()
         assert len(records) == 1
-        # 已知实例不再由 LLM 产出，改为代码自动追加论文元信息
         assert records[0]["ex"] == "old example; Attention Is All You Need (2017)"
 
 
@@ -244,9 +253,7 @@ def test_training_graph_skips_duplicate(monkeypatch, neo4j_client):
 
     monkeypatch.setattr("src.paper.resolver.AMinerClient", FakeAMinerClient)
     monkeypatch.setattr("src.paper.resolver.ArxivExtractor", FakeArxivExtractor)
-    monkeypatch.setattr(
-        "src.agent.training.PaperLibrary.is_trained", lambda self, paper_id: True
-    )
+    _mock_try_reserve_dup(monkeypatch)
 
     call_count = [0]
 

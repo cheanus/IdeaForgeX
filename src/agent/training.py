@@ -67,7 +67,9 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
 
     def check_duplicate(state: TrainingState) -> dict:
         paper_id = state["paper_id"]  # type: ignore[reportTypedDictNotRequiredAccess]
-        if paper_library.is_trained(paper_id):
+        title = state.get("paper_title", "")
+        year = state.get("paper_year", "")
+        if not paper_library.try_reserve(paper_id, title, year):
             _logger.info("论文已训练，跳过: %s", paper_id)
             return {"already_trained": True}
         return {"already_trained": False}
@@ -147,6 +149,23 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
             edges, inspirations, state.get("retrieved_nodes", [])
         )
 
+        # 为 LLM 生成的 ID 添加 paper_id 前缀，避免并发训练 ID 冲突
+        paper_id = state["paper_id"]  # type: ignore[reportTypedDictNotRequiredAccess]
+        prefix = f"{paper_id}__"
+        old_to_new: dict[str, str] = {}
+
+        for insp in inspirations:
+            old_to_new[insp.id] = prefix + insp.id
+            insp.id = old_to_new[insp.id]
+        for q in questions:
+            old_to_new[q.id] = prefix + q.id
+            q.id = old_to_new[q.id]
+        for edge in edges:
+            if edge.from_id in old_to_new:
+                edge.from_id = old_to_new[edge.from_id]
+            if edge.to_id in old_to_new:
+                edge.to_id = old_to_new[edge.to_id]
+
         # 用真实 embedding 替换向量占位符
         all_descs = [n.核心描述 for n in inspirations] + [q.核心描述 for q in questions]
         if all_descs:
@@ -184,14 +203,6 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
         )
         return {}
 
-    def mark_trained(state: TrainingState) -> dict:
-        paper_library.add(
-            state["paper_id"],  # type: ignore[reportTypedDictNotRequiredAccess]
-            state.get("paper_title", ""),
-            state.get("paper_year", ""),
-        )
-        return {}
-
     def skip_training(state: TrainingState) -> dict:
         return {}
 
@@ -206,7 +217,6 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
         retry_policy=RetryPolicy(max_attempts=config.max_retries),
     )
     graph.add_node("commit_candidates", commit_candidates)
-    graph.add_node("mark_trained", mark_trained)
     graph.add_node("skip", skip_training)
 
     graph.add_edge(START, "load_paper")
@@ -224,8 +234,7 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
         route_after_llm_a,
         {"commit_candidates": "commit_candidates"},
     )
-    graph.add_edge("commit_candidates", "mark_trained")
-    graph.add_edge("mark_trained", END)
+    graph.add_edge("commit_candidates", END)
 
     memory = MemorySaver()
     return graph.compile(checkpointer=memory)
