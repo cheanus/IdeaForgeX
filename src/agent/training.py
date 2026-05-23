@@ -131,6 +131,8 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
         return "commit_candidates"
 
     def commit_candidates(state: TrainingState) -> dict:
+        # can_infer=True  = 论文可直接推断（无需提取新知识）→ 跳过提交
+        # can_infer=False = 需要提取新节点 → 写入 Neo4j
         can_infer = state.get("can_infer", False)
         if can_infer:
             _logger.info("可直接推断，无需提取新节点")

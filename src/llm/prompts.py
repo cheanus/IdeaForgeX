@@ -61,7 +61,12 @@ def build_llm_a_judge_messages(
     paper_title: str = "",
     paper_year: str = "",
 ) -> list[dict[str, str]]:
-    """训练阶段：LLM A 判断论文是否可直接推断，或提取新知识 + 更新已有节点。"""
+    """训练阶段：LLM A 判断论文是否可直接推断，或提取新知识 + 更新已有节点。
+
+    注意 can_infer 语义（容易误解）：
+      True  = 论文可直接推断（无需提取新知识）→ 应用层应跳过节点提交
+      False = 需要提取新节点 → 应用层应将 inspiration_nodes/question_nodes/edges 写入 Neo4j
+    """
     retrieved_text = _format_retrieved_nodes(retrieved_nodes, detailed=True)
     if retrieved_text:
         retrieved_text = (
