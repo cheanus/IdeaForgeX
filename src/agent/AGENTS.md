@@ -16,6 +16,7 @@ class TrainingState(TypedDict):
     query_text: str          # LLM 生成的检索查询
     retrieved_nodes: list    # 图检索结果 [{node, score}]
     can_infer: bool
+    already_trained: bool    # 去重标记
     llm_a: dict
     inspirations: list       # InspirationNode
     questions: list          # QuestionNode
@@ -26,34 +27,62 @@ class TrainingState(TypedDict):
 
 ## StateGraph 模式
 
-### 训练 (6 节点)
+### 训练 (7 节点)
+
+```
+load_paper → check_duplicate → {skip | generate_query → retrieve
+  → llm_a_judge → commit_candidates} → END
+```
 
 ```python
 builder = StateGraph(TrainingState)
 
 builder.add_node("load_paper", load_paper)
+builder.add_node("check_duplicate", check_duplicate)     # SQLite try_reserve
 builder.add_node("generate_query", generate_query)       # LLM 调用 1
 builder.add_node("retrieve", retrieve)                    # 无 LLM
 builder.add_node("llm_a_judge", node_llm_a)               # LLM 调用 2 (RetryPolicy)
-builder.add_node("record_paper", record_paper)
 builder.add_node("commit_candidates", commit_candidates)
+builder.add_node("skip", skip_training)
 
 builder.add_edge(START, "load_paper")
-builder.add_edge("load_paper", "generate_query")
+builder.add_edge("load_paper", "check_duplicate")
+builder.add_conditional_edges("check_duplicate", route_after_dup, {
+    "skip": "skip",
+    "generate_query": "generate_query",
+})
+builder.add_edge("skip", END)
 builder.add_edge("generate_query", "retrieve")
 builder.add_edge("retrieve", "llm_a_judge")
-builder.add_conditional_edges("llm_a_judge", route_after_a, {
-    "record_paper": "record_paper",
-    "commit_candidates": "commit_candidates"
+builder.add_conditional_edges("llm_a_judge", route_after_llm_a, {
+    "commit_candidates": "commit_candidates",
 })
-builder.add_edge("record_paper", END)
 builder.add_edge("commit_candidates", END)
 ```
+
+### check_duplicate 去重
+
+```python
+def check_duplicate(state):
+    if not paper_library.try_reserve(paper_id, title, year):
+        return {"already_trained": True}
+    return {"already_trained": False}
+```
+
+`try_reserve()` 是原子操作（`INSERT OR IGNORE`），一次完成检查+预留，避免并发竞态。
 
 ### commit_candidates 写入顺序
 
 ```python
 def commit_candidates(state):
+    if not state.get("can_infer"):
+        return {}          # LLM 判断不可提炼，跳过提交
+    # LLM 生成的节点 ID 加 paper_id 前缀防并发冲突
+    prefix = f"{paper_id}__"
+    for node in inspirations + questions:
+        node.id = prefix + node.id
+    # 边 from_id/to_id 同步加前缀
+    ...
     with session:
         if node_updates:
             session.execute_write(batch_update, node_updates)    # MATCH + SET（先更新）

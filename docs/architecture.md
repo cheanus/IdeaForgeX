@@ -61,7 +61,7 @@ flowchart TD
 加载论文 → LLM提炼查询 → 图检索 → LLM判断(修改已有/新增节点) → 事务写入
 ```
 
-6 节点 StateGraph，2 次 LLM 调用，条件边路由。写入顺序：先 `MATCH+SET` 更新已有节点，再 `CREATE` 新节点。
+7 节点 StateGraph，2 次 LLM 调用，2 处条件边（去重检查 + 提炼判断）。写入顺序：先 `MATCH+SET` 更新已有节点，再 `CREATE` 新节点。
 
 ### 5.2 推理
 

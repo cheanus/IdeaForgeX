@@ -45,7 +45,7 @@ SQLite 文件（`data/trained_papers.db`）存储已训练论文 ID 集合，仅
 
 ## 4. 检索遍历
 
-5 阶段：向量搜索（Inspiration + Question 混合 top-k）→ 精化链双向展开（不限深）→ 1-hop 扩展（按权重截断）→ 2-hop 扩展 → 去重按分数截断。
+5 阶段：向量搜索（Inspiration + Question 混合 top-k）→ 精化链双向展开（不限深）→ BFS 图扩展（可配深度，每层分数衰减）→ 去重按分数截断。
 
 每一步的 k、hop 数、衰减因子均可配置。
 
