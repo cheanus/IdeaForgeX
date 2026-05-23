@@ -39,8 +39,6 @@ LLM 返回 JSON → `models.py` 的 Pydantic 验证 → 写入 Neo4j。验证失
 ### 测试
 
 ```bash
-uv format
-pyright
 uv run pytest -v
 ```
 

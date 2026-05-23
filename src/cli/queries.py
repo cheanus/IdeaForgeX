@@ -113,16 +113,27 @@ def cmd_retrieve(
     t0 = time.monotonic()
     embeddings = llm_client.embed([query_text])
 
-    k_hits = top_k or config.k_hits
-    max_depth = expand_hops or config.max_depth
-    max_neighbors = max_per_node or config.max_neighbors
-    score_decay = decay or config.score_decay
-    final_k = final_limit or config.final_k
+    overrides = {}
+    if top_k is not None:
+        overrides["k_hits"] = top_k
+    if expand_hops is not None:
+        overrides["max_depth"] = expand_hops
+    if max_per_node is not None:
+        overrides["max_neighbors"] = max_per_node
+    if decay is not None:
+        overrides["score_decay"] = decay
+    if final_limit is not None:
+        overrides["final_k"] = final_limit
 
-    candidates = retrieve_with_traversal(neo4j_client, embeddings[0], config)
+    effective_config = config.model_copy(update=overrides) if overrides else config
+    candidates = retrieve_with_traversal(neo4j_client, embeddings[0], effective_config)
 
     total_hits = len(candidates)
-    ranked = candidates[:final_k]
+    ranked = candidates[: effective_config.final_k]
+
+    k_hits = effective_config.k_hits
+    max_depth = effective_config.max_depth
+    score_decay = effective_config.score_decay
 
     node_ids = [item["node"]["id"] for item in ranked]
     edges_map = _get_edges_batch(neo4j_client, node_ids)

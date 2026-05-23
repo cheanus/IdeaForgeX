@@ -46,7 +46,7 @@ AI 论文创新点知识图谱系统。训练时通过 LLM 从论文中提炼方
 
 ```bash
 docker compose up -d
-cp config_example.yaml config.yaml
+cp config.example.yaml config.yaml
 uv run python main.py bootstrap
 ```
 

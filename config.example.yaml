@@ -1,0 +1,38 @@
+# ── LLM ──
+llm_base_url: "https://api.deepseek.com/v1"
+llm_api_key: ""
+llm_model_name: "deepseek-v4-flash"
+llm_json_mode: true         # false=不传 response_format，兼容不支持 JSON 模式的 LLM
+llm_thinking_enabled: true  # true=添加 extra_body 思考模式
+llm_temperature: 1.0
+max_retries: 3
+
+# ── Embedding ──
+embedding_base_url: "https://api.siliconflow.cn/v1"
+embedding_api_key: ""
+embedding_model_name: "Qwen/Qwen3-Embedding-4B"
+embedding_dim: 2560
+
+# ── 论文源 ──
+aminer_api_key: ""
+aminer_base_url: "https://datacenter.aminer.cn/gateway/open_platform"
+arxiv_api_url: "https://export.arxiv.org/api/query"
+arxiv_short_abstract_threshold: 200  # 摘要低于此字符数时触发全文 PDF 降级
+
+# ── Neo4j ──
+neo4j_uri: "bolt://localhost:7688"
+neo4j_user: "neo4j"
+neo4j_password: ""
+neo4j_database: "neo4j"
+
+# ── 检索 ──
+# 检索流程：向量搜索(Inspiration+Question 各搜 k_hits 个) → 精化链展开 → BFS 图扩展(max_depth 层×max_neighbors 邻居)
+# → 分数衰减(每跳乘 score_decay) → 排序去重 → 截断 final_k 个返回
+k_hits: 8             # 向量搜索 top-k，每个索引返回的最相似节点数
+max_neighbors: 2      # 图扩展时每节点取前 N 个最强关联邻居（按边权重降序）
+max_depth: 1          # BFS 扩展层数，1=仅 1-hop，2=1-hop + 2-hop。越深候选池越大，相关性越低
+score_decay: 0.5      # 每跳衰减因子，邻居得分 = 源节点分 × score_decay。越低图扩展节点越难进入最终结果
+final_k: 15           # 最终返回的候选节点数
+
+# ── 日志 ──
+log_level: "WARNING"  # DEBUG | INFO | WARNING | ERROR

@@ -48,7 +48,7 @@ First time setup:
 
 ```bash
 docker compose up -d
-cp config_example.yaml config.yaml
+cp config.example.yaml config.yaml
 uv run python main.py bootstrap
 ```
 
