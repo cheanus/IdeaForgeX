@@ -27,8 +27,10 @@ def _zero_vector(dim: int) -> list[float]:
 
 
 @pytest.mark.neo4j
-def test_training_graph_routes_can_infer_to_record_paper(monkeypatch, neo4j_client):
-    """验证 can_infer=True 时走 record_paper 路径并实际写入 Neo4j。"""
+def test_training_graph_routes_can_infer_to_commit_candidates(
+    monkeypatch, neo4j_client
+):
+    """验证 can_infer=True 时走 commit_candidates 路径。"""
     config = Config(
         neo4j_database="neo4j",
         arxiv_short_abstract_threshold=200,
@@ -69,20 +71,17 @@ def test_training_graph_routes_can_infer_to_record_paper(monkeypatch, neo4j_clie
     assert len(result["retrieved_nodes"]) == 1
     assert call_count[0] == 2
 
+    # can_infer=True 走 commit_candidates，不产生 PaperRecord
     with neo4j_client.driver.session(
         database=neo4j_client.config.neo4j_database
     ) as session:
-        records = session.run(
-            "MATCH (r:PaperRecord {id: $id}) RETURN r.title AS title",
-            id=resolved_id,
-        ).data()
-        assert len(records) == 1
-        assert records[0]["title"] == ATTENTION_TITLE
+        records = session.run("MATCH (r:PaperRecord) RETURN count(r) AS c").data()
+        assert records[0]["c"] == 0
 
 
 @pytest.mark.neo4j
-def test_training_graph_commits_candidates_when_cannot_infer(monkeypatch, neo4j_client):
-    """验证 can_infer=False 时走 commit_candidates 路径并写入节点和关系。"""
+def test_training_graph_commits_candidates_when_can_infer(monkeypatch, neo4j_client):
+    """验证 can_infer=True 时走 commit_candidates 路径并写入节点和关系。"""
     config = Config(
         neo4j_database="neo4j",
         arxiv_short_abstract_threshold=200,
@@ -103,7 +102,7 @@ def test_training_graph_commits_candidates_when_cannot_infer(monkeypatch, neo4j_
             return {"query_text": "attention mechanism"}
         if parser is parse_llm_a_candidate:
             return LLMACandidate(
-                can_infer=False,
+                can_infer=True,
                 inspiration_nodes=[
                     InspirationNode(
                         id="i1", 核心描述="test insp", 向量=_zero_vector(dim)
@@ -131,7 +130,7 @@ def test_training_graph_commits_candidates_when_cannot_infer(monkeypatch, neo4j_
         {"configurable": {"thread_id": TEST_PAPER_ID}},
     )
 
-    assert result["can_infer"] is False
+    assert result["can_infer"] is True
 
     with neo4j_client.driver.session(
         database=neo4j_client.config.neo4j_database
@@ -187,7 +186,7 @@ def test_training_graph_commits_node_updates(monkeypatch, neo4j_client):
             return {"query_text": "attention"}
         if parser is parse_llm_a_candidate:
             return LLMACandidate(
-                can_infer=False,
+                can_infer=True,
                 node_updates=[  # type: ignore[reportArgumentType]
                     {"node_id": "insp-existing", "已知实例": "new example from paper"}
                 ],
@@ -202,7 +201,7 @@ def test_training_graph_commits_node_updates(monkeypatch, neo4j_client):
         {"configurable": {"thread_id": TEST_PAPER_ID}},
     )
 
-    assert result["can_infer"] is False
+    assert result["can_infer"] is True
 
     with neo4j_client.driver.session(
         database=neo4j_client.config.neo4j_database

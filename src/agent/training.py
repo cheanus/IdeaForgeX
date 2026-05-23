@@ -112,7 +112,7 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
         }
 
     def route_after_llm_a(state: TrainingState) -> str:
-        return "record_paper" if state.get("can_infer") else "commit_candidates"
+        return "commit_candidates" if state.get("can_infer") else "record_paper"
 
     def record_paper(state: TrainingState) -> dict:
         _logger.info("无需新增节点，仅记录论文")
