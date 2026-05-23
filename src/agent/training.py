@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Annotated
 
 from langgraph.checkpoint.memory import MemorySaver
@@ -24,6 +25,8 @@ from src.neo4j.client import Neo4jClient
 from src.neo4j.retrieval import retrieve_with_traversal
 from src.neo4j.schema import append_known_instance, batch_update, batch_write
 from src.paper.resolver import build_practice_summary, resolve_paper_spec
+
+_logger = logging.getLogger("ideaforgex")
 
 
 class TrainingState(TypedDict, total=False):
@@ -48,7 +51,9 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
         if paper_text:
             return {}
         paper_id = state["paper_id"]  # type: ignore[reportTypedDictNotRequiredAccess]
+        _logger.info("正在获取论文摘要 …")
         record = resolve_paper_spec(config, paper_id)
+        _logger.info("论文摘要获取完成: %s", record["title"])
         return {
             "paper_id": record["paper_id"],
             "paper_title": record["title"],
@@ -57,6 +62,7 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
         }
 
     def generate_query(state: TrainingState) -> dict:
+        _logger.info("正在生成检索查询 …")
         messages = build_query_generation_messages(state["paper_text"])  # type: ignore[reportTypedDictNotRequiredAccess]
         result = call_with_retry(
             client,
@@ -65,14 +71,18 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
             temperature=config.llm_temperature,
             parser=parse_query_text,
         )
+        _logger.info("检索查询生成完成")
         return {"query_text": result["query_text"]}
 
     def retrieve(state: TrainingState) -> dict:
+        _logger.info("正在检索知识图谱 …")
         embeddings = client.embed([state["query_text"]])  # type: ignore[reportTypedDictNotRequiredAccess]
         nodes = retrieve_with_traversal(neo4j_client, embeddings[0], config)
+        _logger.info("知识图谱检索完成，命中 %d 条", len(nodes))
         return {"retrieved_nodes": nodes}
 
     def llm_a_judge(state: TrainingState) -> dict:
+        _logger.info("正在 LLM 分析，判断可提炼性 …")
         practice_summary = build_practice_summary(neo4j_client)
         messages = build_llm_a_judge_messages(
             state["paper_text"],  # type: ignore[reportTypedDictNotRequiredAccess]
@@ -88,6 +98,10 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
             temperature=config.llm_temperature,
             parser=parse_llm_a_candidate,
         )
+        _logger.info(
+            "LLM 分析完成，%s",
+            "可提炼新节点" if payload.can_infer else "无可提炼内容，仅记录论文",
+        )
         return {
             "llm_a": payload.model_dump(),
             "can_infer": payload.can_infer,
@@ -101,6 +115,7 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
         return "record_paper" if state.get("can_infer") else "commit_candidates"
 
     def record_paper(state: TrainingState) -> dict:
+        _logger.info("无需新增节点，仅记录论文")
         with neo4j_client.driver.session(database=config.neo4j_database) as session:
             session.run(
                 "CREATE (:PaperRecord {id: $id, title: $title})",
@@ -110,6 +125,7 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
         return {}
 
     def commit_candidates(state: TrainingState) -> dict:
+        _logger.info("正在提交候选人到图谱 …")
         inspirations = [
             InspirationNode.model_validate(item)
             for item in state.get("inspirations", [])
@@ -155,6 +171,13 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
                     )
             if inspirations or questions:
                 session.execute_write(batch_write, inspirations, questions, edges)
+        _logger.info(
+            "候选人提交完成: +%d 灵感, +%d 问题, +%d 边, 更新 %d 节点",
+            len(inspirations),
+            len(questions),
+            len(edges),
+            len(node_updates),
+        )
         return {}
 
     graph = StateGraph(TrainingState)

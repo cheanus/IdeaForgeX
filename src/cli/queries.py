@@ -1,7 +1,8 @@
-"""retrieve / inspect 命令实现。"""
+"""retrieve / inspect / random / relate 命令实现。"""
 
 from __future__ import annotations
 
+import logging
 import time
 from typing import Any
 
@@ -22,6 +23,8 @@ EDGE_TYPE_LABELS: dict[str, str] = {
 }
 QUESTION_FIELDS: list[str] = ["问题类型", "当前现状", "未解决部分"]
 INSPIRATION_FIELDS: list[str] = ["前提条件", "操作步骤", "已知实例"]
+
+_logger = logging.getLogger("ideaforgex")
 
 
 def _build_chain(node: dict[str, Any], client: Neo4jClient) -> list[dict[str, Any]]:
@@ -100,6 +103,7 @@ def cmd_retrieve(
     candidates = retrieve_with_traversal(neo4j_client, embeddings[0], effective_config)
 
     total_hits = len(candidates)
+    _logger.info("图检索完成，返回 %d 条", total_hits)
     ranked = candidates[: effective_config.final_k]
 
     nodes: list[dict[str, Any]] = []

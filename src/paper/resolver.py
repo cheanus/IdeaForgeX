@@ -8,11 +8,14 @@ resolve_paper_spec() 接受论文 ID 或标题，按以下优先级尝试获取�
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any
 
 from src.config import Config
 from src.neo4j.client import Neo4jClient
+
+_logger = logging.getLogger("ideaforgex")
 from src.paper.discovery import AMinerClient
 from src.paper.extractor import ArxivExtractor
 
@@ -120,9 +123,10 @@ def resolve_paper_spec(config: Config, spec: str) -> dict[str, Any]:
         try:
             result = _load_from_arxiv(config, spec)
             result["text"] = _enforce_text_limit(result["text"])
+            _logger.info("论文解析完成，数据源: arXiv ID 直查")
             return result
         except Exception:
-            pass
+            _logger.info("arXiv ID 查询失败，尝试标题搜索 …")
         # arXiv ID 查询失败，继续尝试其他方式
 
     title = spec
@@ -141,8 +145,12 @@ def resolve_paper_spec(config: Config, spec: str) -> dict[str, Any]:
     except Exception:
         pass
 
+    if text.strip():
+        _logger.info("论文解析完成，数据源: arXiv 标题搜索")
+
     # 优先级3：AMiner 语义搜索（arxiv 未获取到内容时启用）
     if not text.strip():
+        _logger.info("arXiv 未获取到内容，尝试 AMiner 搜索 …")
         try:
             result = _try_aminer_search(config, spec)
             if result:
@@ -150,8 +158,9 @@ def resolve_paper_spec(config: Config, spec: str) -> dict[str, Any]:
                 title = result["title"]
                 text = result["text"]
                 paper_id = result["paper_id"]
+                _logger.info("论文解析完成，数据源: AMiner 语义搜索")
         except Exception:
-            pass
+            _logger.warning("AMiner 搜索也失败")
 
     if not text.strip():
         raise ValueError(f"无法解析论文 '{spec}'：所有数据源均失败，未能获取论文内容")

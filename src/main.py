@@ -89,19 +89,23 @@ def main() -> None:
 
     try:
         if args.command == "bootstrap":
+            _logger.info("开始初始化 schema …")
             ensure_schema(neo4j_client)
             _logger.info("已完成 schema 初始化")
             return
         if args.command == "reset":
+            _logger.info("开始清空实践库 …")
             reset_practice_graph(neo4j_client)
             _logger.info("已清空实践库")
             return
         if args.command == "train":
+            _logger.info("开始训练，论文 ID: %s", args.paper)
             graph = build_training_graph(config, llm_client, neo4j_client)
             result = run_training(graph, args.paper)
             _logger.info("训练完成，已生成训练图谱")
             return
         if args.command == "retrieve":
+            _logger.info("开始检索: %s", args.query)
             result = cmd_retrieve(
                 config,
                 llm_client,
@@ -113,17 +117,11 @@ def main() -> None:
                 decay=args.decay,
                 final_limit=args.final_limit,
             )
-            _json_print(result)
-            return
-        if args.command == "inspect":
-            result = cmd_inspect(
-                neo4j_client,
-                args.id,
-                expand_edges=args.expand_edges,
-            )
+            _logger.info("检索完成，返回 %d 条", result["meta"]["total_hits"])
             _json_print(result)
             return
         if args.command == "random":
+            _logger.info("随机探索，模式=%s", "主题加权" if args.query else "纯随机")
             result = cmd_random(
                 config,
                 llm_client,
@@ -131,14 +129,20 @@ def main() -> None:
                 count=args.count,
                 query_text=args.query,
             )
+            _logger.info("随机探索完成，返回 %d 个节点", len(result["nodes"]))
             _json_print(result)
             return
         if args.command == "relate":
+            _logger.info("路径查询: %s ↔ %s", args.id_a, args.id_b)
             result = cmd_relate(
                 neo4j_client,
                 args.id_a,
                 args.id_b,
                 max_len=args.max_len,
+            )
+            _logger.info(
+                "路径查询完成，%s",
+                "已连通" if result["connected"] else "未连通",
             )
             _json_print(result)
             return
