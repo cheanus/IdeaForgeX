@@ -4,7 +4,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.agent.common import parse_llm_a_candidate, parse_query_text
+from src.agent.common import (
+    parse_llm_a_candidate,
+    parse_query_text,
+    validate_and_fix_refinement_edges,
+)
 from src.agent.training import build_training_graph
 from src.config import Config
 from src.models import Edge, InspirationNode, LLMACandidate, QuestionNode, RelationType
@@ -371,3 +375,102 @@ def test_parse_llm_a_candidate_preserves_query_text():
     candidate = parse_llm_a_candidate(payload)
 
     assert candidate.query_text == "transformer attention mechanism"
+
+
+class TestValidateAndFixRefinementEdges:
+    """validate_and_fix_refinement_edges 边界校验测试。"""
+
+    def _insp(self, nid: str, granularity: int) -> InspirationNode:
+        return InspirationNode(id=nid, 核心描述="desc", 粒度=granularity, 向量=[0.0])
+
+    def _edge(self, from_id: str, to_id: str, rel_type: RelationType) -> Edge:
+        return Edge(from_id=from_id, to_id=to_id, rel_type=rel_type, weight=1.0)
+
+    def _retrieved(self, items: list[tuple[str, int]]) -> list[dict]:
+        return [{"node": {"id": nid, "粒度": g}} for nid, g in items]
+
+    def test_non_refinement_edges_pass_through(self):
+        """非 INSP_REFINES 边直接透传。"""
+        edges = [self._edge("a", "b", RelationType.insp_question)]
+        result = validate_and_fix_refinement_edges(edges, [], [])
+        assert len(result) == 1
+        assert result[0].rel_type == RelationType.insp_question
+
+    def test_valid_refinement_passes_through(self):
+        """粒度 N→N+1 的精化边直接通过。"""
+        edges = [self._edge("i1", "i2", RelationType.insp_refines)]
+        inspirations = [self._insp("i1", 1), self._insp("i2", 2)]
+        result = validate_and_fix_refinement_edges(edges, inspirations, [])
+        assert len(result) == 1
+        assert result[0].rel_type == RelationType.insp_refines
+        assert result[0].from_id == "i1"
+        assert result[0].to_id == "i2"
+
+    def test_missing_granularity_passes_through(self):
+        """未知粒度的边直接透传。"""
+        edges = [self._edge("x", "y", RelationType.insp_refines)]
+        result = validate_and_fix_refinement_edges(edges, [], [])
+        assert len(result) == 1
+        assert result[0].rel_type == RelationType.insp_refines
+
+    def test_granularity_skip_with_retrieved_bridge(self):
+        """粒度跳跃但 retrieved 中有中间节点 → 拆分为两条边。"""
+        edges = [self._edge("i1", "i3", RelationType.insp_refines)]
+        inspirations = [self._insp("i1", 1), self._insp("i3", 3)]
+        retrieved = self._retrieved([("bridge", 2)])
+        result = validate_and_fix_refinement_edges(edges, inspirations, retrieved)
+        assert len(result) == 2
+        rel_types = {e.rel_type for e in result}
+        assert rel_types == {RelationType.insp_refines}
+        ids = {(e.from_id, e.to_id) for e in result}
+        assert ids == {("i1", "bridge"), ("bridge", "i3")}
+
+    def test_granularity_skip_with_new_inspiration_bridge(self):
+        """粒度跳跃但新的 Inspiration 中有中间节点 → 拆分为两条边。"""
+        edges = [self._edge("i1", "i3", RelationType.insp_refines)]
+        inspirations = [
+            self._insp("i1", 1),
+            self._insp("bridge", 2),
+            self._insp("i3", 3),
+        ]
+        result = validate_and_fix_refinement_edges(edges, inspirations, [])
+        assert len(result) == 2
+        ids = {(e.from_id, e.to_id) for e in result}
+        assert ids == {("i1", "bridge"), ("bridge", "i3")}
+
+    def test_granularity_skip_no_bridge_downgraded(self):
+        """粒度跳跃且无中间节点 → 降级为 INSP_COMBINES。"""
+        edges = [self._edge("i1", "i3", RelationType.insp_refines)]
+        inspirations = [self._insp("i1", 1), self._insp("i3", 3)]
+        result = validate_and_fix_refinement_edges(edges, inspirations, [])
+        assert len(result) == 1
+        assert result[0].rel_type == RelationType.insp_combines
+
+    def test_non_increasing_granularity_downgraded(self):
+        """非递增粒度 → 降级为 INSP_COMBINES。"""
+        edges = [self._edge("i3", "i1", RelationType.insp_refines)]
+        inspirations = [self._insp("i3", 3), self._insp("i1", 1)]
+        result = validate_and_fix_refinement_edges(edges, inspirations, [])
+        assert len(result) == 1
+        assert result[0].rel_type == RelationType.insp_combines
+
+    def test_mixed_edges_correctly_handled(self):
+        """混合边类型：非精化边 + 合规精化边 + 违规边 各自正确处理。"""
+        edges = [
+            self._edge("a", "b", RelationType.insp_question),
+            self._edge("i1", "i2", RelationType.insp_refines),
+            self._edge("i3", "i1", RelationType.insp_refines),
+        ]
+        inspirations = [
+            self._insp("i1", 1),
+            self._insp("i2", 2),
+            self._insp("i3", 3),
+        ]
+        result = validate_and_fix_refinement_edges(edges, inspirations, [])
+        assert len(result) == 3
+        rel_types = [e.rel_type for e in result]
+        assert rel_types == [
+            RelationType.insp_question,
+            RelationType.insp_refines,
+            RelationType.insp_combines,
+        ]
