@@ -12,6 +12,8 @@ import logging
 import re
 from typing import Any
 
+from typing_extensions import TypedDict
+
 from src.config import Config
 from src.neo4j.client import Neo4jClient
 
@@ -21,6 +23,14 @@ from src.paper.extractor import ArxivExtractor
 
 _ARXIV_ID_PATTERN = re.compile(r"^\d{4}\.\d{4,5}(?:v\d+)?$|^[a-z-]+/\d{7}(?:v\d+)?$")
 _MAX_TEXT_LENGTH = 12000
+
+
+class PaperRecord(TypedDict):
+    paper_id: str
+    title: str
+    text: str
+    year: str
+    paper: dict[str, Any]
 
 
 def _is_arxiv_id(spec: str) -> bool:
@@ -42,7 +52,7 @@ def _resolve_text(
     return abstract
 
 
-def _load_from_arxiv(config: Config, arxiv_id: str) -> dict[str, Any]:
+def _load_from_arxiv(config: Config, arxiv_id: str) -> PaperRecord:
     """已知 arXiv ID，直接从 arXiv 获取论文数据。"""
     extractor = ArxivExtractor(config)
     detail = extractor.get_paper_detail(arxiv_id)
@@ -58,7 +68,7 @@ def _load_from_arxiv(config: Config, arxiv_id: str) -> dict[str, Any]:
     }
 
 
-def _try_aminer_search(config: Config, query: str) -> dict[str, Any] | None:
+def _try_aminer_search(config: Config, query: str) -> PaperRecord | None:
     """通过 AMiner 语义搜索查找论文，返回第一篇的详细信息。"""
     client = AMinerClient(config)
     papers = client.search_papers(query, limit=3)
@@ -80,7 +90,7 @@ def _try_aminer_search(config: Config, query: str) -> dict[str, Any] | None:
     }
 
 
-def _try_arxiv_fallback(config: Config, title: str) -> dict[str, Any] | None:
+def _try_arxiv_fallback(config: Config, title: str) -> PaperRecord | None:
     """通过 arXiv 标题搜索获取论文，必要时降级到全文 PDF。"""
     extractor = ArxivExtractor(config)
     arxiv_id = extractor.find_arxiv_id({"title": title})
@@ -105,7 +115,7 @@ def _enforce_text_limit(text: str) -> str:
     return text
 
 
-def resolve_paper_spec(config: Config, spec: str) -> dict[str, Any]:
+def resolve_paper_spec(config: Config, spec: str) -> PaperRecord:
     """智能解析论文描述（ID 或标题），多级降级获取数据。
 
     优先级：
