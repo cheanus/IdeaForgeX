@@ -22,6 +22,10 @@ _TEST_NEO4J_CONFIG: dict[str, Any] = {
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "neo4j: requires Neo4j test container")
+    try:
+        os.remove("data/test_papers.db")
+    except FileNotFoundError:
+        pass
 
 
 def _make_test_client() -> Neo4jClient:
