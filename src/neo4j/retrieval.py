@@ -17,29 +17,17 @@ class RetrievalHit:
 
 
 def _vector_query_cypher(index_name: str) -> str:
-    if index_name == "idx_insp_vector":
-        return """
-            MATCH (node:Inspiration)
-            SEARCH node IN (
-                VECTOR INDEX idx_insp_vector
-                FOR $embedding
-                LIMIT $k
-            ) SCORE AS score
-            RETURN node, labels(node)[0] AS node_type, score
-            ORDER BY score DESC
-        """
-    if index_name == "idx_q_vector":
-        return """
-            MATCH (node:Question)
-            SEARCH node IN (
-                VECTOR INDEX idx_q_vector
-                FOR $embedding
-                LIMIT $k
-            ) SCORE AS score
-            RETURN node, labels(node)[0] AS node_type, score
-            ORDER BY score DESC
-        """
-    raise ValueError(f"不支持的向量索引: {index_name}")
+    label = "Inspiration" if "insp" in index_name else "Question"
+    return f"""
+        MATCH (node:{label})
+        SEARCH node IN (
+            VECTOR INDEX {index_name}
+            FOR $embedding
+            LIMIT $k
+        ) SCORE AS score
+        RETURN node, labels(node)[0] AS node_type, score
+        ORDER BY score DESC
+    """
 
 
 def vector_search(

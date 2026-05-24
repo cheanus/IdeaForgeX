@@ -28,21 +28,26 @@ def _is_arxiv_id(spec: str) -> bool:
     return bool(_ARXIV_ID_PATTERN.match(spec.strip()))
 
 
+def _resolve_text(
+    config: Config, extractor: ArxivExtractor, arxiv_id: str, abstract: str
+) -> str:
+    """必要时降级到全文 PDF 获取更长文本。"""
+    if len(abstract) < config.arxiv_short_abstract_threshold:
+        try:
+            full_text = extractor.fetch_full_text(arxiv_id)
+            if full_text:
+                return full_text
+        except Exception as exc:
+            _logger.warning("arXiv 全文获取失败，降级为摘要: %s", exc)
+    return abstract
+
+
 def _load_from_arxiv(config: Config, arxiv_id: str) -> dict[str, Any]:
     """已知 arXiv ID，直接从 arXiv 获取论文数据。"""
     extractor = ArxivExtractor(config)
     detail = extractor.get_paper_detail(arxiv_id)
     title = detail.get("title", arxiv_id)
-    text = detail.get("abstract", "")
-
-    if len(text) < config.arxiv_short_abstract_threshold:
-        try:
-            full_text = extractor.fetch_full_text(arxiv_id)
-            if full_text:
-                text = full_text
-        except Exception as exc:
-            _logger.warning("arXiv 全文获取失败，降级为摘要: %s", exc)
-
+    text = _resolve_text(config, extractor, arxiv_id, detail.get("abstract", ""))
     year = detail.get("year", "")
     return {
         "paper_id": arxiv_id,
@@ -83,16 +88,7 @@ def _try_arxiv_fallback(config: Config, title: str) -> dict[str, Any] | None:
         return None
     detail = extractor.get_paper_detail(arxiv_id)
     result_title = detail.get("title", title)
-    text = detail.get("abstract", "")
-
-    if len(text) < config.arxiv_short_abstract_threshold:
-        try:
-            full_text = extractor.fetch_full_text(arxiv_id)
-            if full_text:
-                text = full_text
-        except Exception as exc:
-            _logger.warning("arXiv 全文获取失败，降级为摘要: %s", exc)
-
+    text = _resolve_text(config, extractor, arxiv_id, detail.get("abstract", ""))
     year = detail.get("year", "")
     return {
         "paper_id": arxiv_id,
