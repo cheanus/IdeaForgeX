@@ -67,9 +67,7 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
 
     def check_duplicate(state: TrainingState) -> dict:
         paper_id = state["paper_id"]  # type: ignore[reportTypedDictNotRequiredAccess]
-        title = state.get("paper_title", "")
-        year = state.get("paper_year", "")
-        if not paper_library.try_reserve(paper_id, title, year):
+        if paper_library.is_trained(paper_id):
             _logger.info("论文已训练，跳过: %s", paper_id)
             return {"already_trained": True}
         return {"already_trained": False}
@@ -134,8 +132,12 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
         # can_infer=True  = 论文可直接推断（无需提取新知识）→ 跳过提交
         # can_infer=False = 需要提取新节点 → 写入 Neo4j
         can_infer = state.get("can_infer", False)
+        paper_id = state["paper_id"]  # type: ignore[reportTypedDictNotRequiredAccess]
+        paper_title = state.get("paper_title", "")
+        paper_year = state.get("paper_year", "")
         if can_infer:
             _logger.info("可直接推断，无需提取新节点")
+            paper_library.try_reserve(paper_id, paper_title, paper_year)
             return {}
         _logger.info("正在提交候选人到图谱 …")
         inspirations = [
@@ -156,7 +158,6 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
         )
 
         # 为 LLM 生成的 ID 添加 paper_id 前缀，避免并发训练 ID 冲突
-        paper_id = state["paper_id"]  # type: ignore[reportTypedDictNotRequiredAccess]
         prefix = f"{paper_id}__"
         old_to_new: dict[str, str] = {}
 
@@ -183,8 +184,6 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
                 questions[j].向量 = emb
 
         # 为新建灵感节点注入已知实例（当前论文即为实例）
-        paper_title = state.get("paper_title", "")
-        paper_year = state.get("paper_year", "")
         paper_entry = f"{paper_title} ({paper_year})" if paper_year else paper_title
         if paper_entry:
             for n in inspirations:
@@ -207,6 +206,7 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
             len(edges),
             len(node_updates),
         )
+        paper_library.try_reserve(paper_id, paper_title, paper_year)
         return {}
 
     def skip_training(state: TrainingState) -> dict:

@@ -30,19 +30,23 @@ def _prefix_id(paper_id: str, node_id: str) -> str:
     return f"{paper_id}__{node_id}"
 
 
-def _mock_try_reserve_ok(monkeypatch):
-    """模拟 try_reserve 每次都成功（返回 True），正常走训练流程。"""
+def _mock_paper_not_trained(monkeypatch):
+    """模拟论文未训练：is_trained→False（走训练流程），try_reserve→True（commit 时标记成功）。"""
+    monkeypatch.setattr(
+        "src.agent.training.PaperLibrary.is_trained",
+        lambda self, paper_id: False,
+    )
     monkeypatch.setattr(
         "src.agent.training.PaperLibrary.try_reserve",
         lambda self, paper_id, title, year="": True,
     )
 
 
-def _mock_try_reserve_dup(monkeypatch):
-    """模拟 try_reserve 返回 False（已训练），触发跳过逻辑。"""
+def _mock_paper_already_trained(monkeypatch):
+    """模拟论文已训练：is_trained→True，触发跳过逻辑。"""
     monkeypatch.setattr(
-        "src.agent.training.PaperLibrary.try_reserve",
-        lambda self, paper_id, title, year="": False,
+        "src.agent.training.PaperLibrary.is_trained",
+        lambda self, paper_id: True,
     )
 
 
@@ -76,6 +80,11 @@ def test_training_graph_routes_can_infer_to_commit_candidates(
         raise RuntimeError(f"unexpected parser: {parser}")
 
     monkeypatch.setattr("src.agent.training.call_with_retry", fake_call_with_retry)
+
+    monkeypatch.setattr(
+        "src.agent.training.PaperLibrary.is_trained",
+        lambda self, paper_id: False,
+    )
 
     resolved_id = None
 
@@ -146,7 +155,7 @@ def test_training_graph_commits_candidates_when_cannot_infer(monkeypatch, neo4j_
         raise RuntimeError(f"unexpected parser: {parser}")
 
     monkeypatch.setattr("src.agent.training.call_with_retry", fake_call_with_retry)
-    _mock_try_reserve_ok(monkeypatch)
+    _mock_paper_not_trained(monkeypatch)
 
     graph = build_training_graph(config, FakeEmbeddingClient(), neo4j_client)  # type: ignore[reportArgumentType]
     result = graph.invoke(
@@ -222,7 +231,7 @@ def test_training_graph_commits_node_updates(monkeypatch, neo4j_client):
         raise RuntimeError(f"unexpected parser: {parser}")
 
     monkeypatch.setattr("src.agent.training.call_with_retry", fake_call_with_retry)
-    _mock_try_reserve_ok(monkeypatch)
+    _mock_paper_not_trained(monkeypatch)
 
     graph = build_training_graph(config, FakeEmbeddingClient(), neo4j_client)  # type: ignore[reportArgumentType]
     result = graph.invoke(
@@ -252,7 +261,7 @@ def test_training_graph_skips_duplicate(monkeypatch, neo4j_client):
 
     monkeypatch.setattr("src.paper.resolver.AMinerClient", FakeAMinerClient)
     monkeypatch.setattr("src.paper.resolver.ArxivExtractor", FakeArxivExtractor)
-    _mock_try_reserve_dup(monkeypatch)
+    _mock_paper_already_trained(monkeypatch)
 
     call_count = [0]
 
