@@ -40,8 +40,8 @@ def _load_from_arxiv(config: Config, arxiv_id: str) -> dict[str, Any]:
             full_text = extractor.fetch_full_text(arxiv_id)
             if full_text:
                 text = full_text
-        except Exception:
-            pass
+        except Exception as exc:
+            _logger.warning("arXiv 全文获取失败，降级为摘要: %s", exc)
 
     year = detail.get("year", "")
     return {
@@ -55,13 +55,14 @@ def _load_from_arxiv(config: Config, arxiv_id: str) -> dict[str, Any]:
 
 def _try_aminer_search(config: Config, query: str) -> dict[str, Any] | None:
     """通过 AMiner 语义搜索查找论文，返回第一篇的详细信息。"""
-    papers = AMinerClient(config).search_papers(query, limit=3)
+    client = AMinerClient(config)
+    papers = client.search_papers(query, limit=3)
     if not papers:
         return None
     best_id = papers[0].get("id")
     if not best_id:
         return None
-    paper = AMinerClient(config).get_paper_detail(best_id)
+    paper = client.get_paper_detail(best_id)
     title = paper.get("title", query)
     text = paper.get("abstract_slice") or paper.get("abstract") or ""
     year = str(paper.get("year", ""))
@@ -89,8 +90,8 @@ def _try_arxiv_fallback(config: Config, title: str) -> dict[str, Any] | None:
             full_text = extractor.fetch_full_text(arxiv_id)
             if full_text:
                 text = full_text
-        except Exception:
-            pass
+        except Exception as exc:
+            _logger.warning("arXiv 全文获取失败，降级为摘要: %s", exc)
 
     year = detail.get("year", "")
     return {
@@ -125,8 +126,8 @@ def resolve_paper_spec(config: Config, spec: str) -> dict[str, Any]:
             result["text"] = _enforce_text_limit(result["text"])
             _logger.info("论文解析完成，数据源: arXiv ID 直查")
             return result
-        except Exception:
-            _logger.info("arXiv ID 查询失败，尝试标题搜索 …")
+        except Exception as exc:
+            _logger.info("arXiv ID 查询失败，尝试标题搜索 … %s", exc)
         # arXiv ID 查询失败，继续尝试其他方式
 
     title = spec
@@ -142,8 +143,8 @@ def resolve_paper_spec(config: Config, spec: str) -> dict[str, Any]:
             title = result["title"]
             text = result["text"]
             paper_id = result["paper_id"]
-    except Exception:
-        pass
+    except Exception as exc:
+        _logger.warning("arXiv 标题搜索失败: %s", exc)
 
     if text.strip():
         _logger.info("论文解析完成，数据源: arXiv 标题搜索")
@@ -159,8 +160,8 @@ def resolve_paper_spec(config: Config, spec: str) -> dict[str, Any]:
                 text = result["text"]
                 paper_id = result["paper_id"]
                 _logger.info("论文解析完成，数据源: AMiner 语义搜索")
-        except Exception:
-            _logger.warning("AMiner 搜索也失败")
+        except Exception as exc:
+            _logger.warning("AMiner 搜索也失败: %s", exc)
 
     if not text.strip():
         raise ValueError(f"无法解析论文 '{spec}'：所有数据源均失败，未能获取论文内容")
