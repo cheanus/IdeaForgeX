@@ -39,6 +39,7 @@ class TrainingState(TypedDict, total=False):
     retrieved_nodes: list[dict]
     can_infer: bool
     already_trained: bool
+    retry_count: int
     llm_a: dict
     inspirations: list[dict]
     questions: list[dict]
