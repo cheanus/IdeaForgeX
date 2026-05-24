@@ -195,4 +195,4 @@ def batch_create(tx, nodes: list[InspirationNode], edges: list[Edge]):
 | `client.py` | `Neo4jClient` 连接管理 |
 | `schema.py` | 约束/索引创建 + 节点/边写入 + 节点更新 |
 | `retrieval.py` | 向量搜索 + 5 阶段遍历 + 去重截断 |
-| `maintenance.py` | `clear_graph` 全量清图 + `resolve_target_uri` 端口映射 |
+| `maintenance.py` | `clear_graph` 全量清图 |

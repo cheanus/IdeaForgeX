@@ -2,12 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.neo4j.maintenance import clear_graph, resolve_target_uri
-
-
-def test_resolve_target_uri_maps_test_and_personal_ports():
-    assert resolve_target_uri("test") == "bolt://localhost:7687"
-    assert resolve_target_uri("personal") == "bolt://localhost:7688"
+from src.neo4j.maintenance import clear_graph
 
 
 @pytest.mark.neo4j

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -64,8 +65,6 @@ def load_config(config_file: str | Path | None = None) -> Config:
                 yaml_data = loaded
 
     # LOG_LEVEL 环境变量覆盖 yaml 中的 log_level
-    import os
-
     env_log_level = os.environ.get("LOG_LEVEL")
     if env_log_level is not None:
         yaml_data["log_level"] = env_log_level

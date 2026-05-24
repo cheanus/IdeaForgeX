@@ -160,7 +160,7 @@ def main() -> None:
             _json_print(result)
             return
         if args.command == "stats":
-            _logger.warning("stats 功能待接入")
+            _logger.info("stats 功能待接入")
     finally:
         neo4j_client.close()
 

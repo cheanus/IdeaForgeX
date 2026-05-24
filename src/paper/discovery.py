@@ -18,7 +18,7 @@ class AMinerClient:
     def headers(self) -> dict[str, str]:
         return {
             "Authorization": self.config.aminer_api_key,
-            "X-Platform": "openclaw",
+            "X-Platform": "ideaforgex",
             "Content-Type": "application/json;charset=utf-8",
         }
 
