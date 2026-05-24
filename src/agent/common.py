@@ -16,7 +16,7 @@ from src.models import (
     RelationType,
 )
 
-logger = logging.getLogger("ideaforgex")
+_logger = logging.getLogger("ideaforgex")
 
 
 def parse_query_text(payload: dict[str, Any]) -> dict[str, str]:
@@ -68,7 +68,7 @@ def _coerce_granularity(value: Any) -> int:
         try:
             return max(GRANULARITY_MIN, min(GRANULARITY_MAX, int(value)))
         except (ValueError, TypeError):
-            logger.warning(f"粒度值 '{value}' 无法转为整数，回退为 {GRANULARITY_MIN}")
+            _logger.warning(f"粒度值 '{value}' 无法转为整数，回退为 {GRANULARITY_MIN}")
             return GRANULARITY_MIN
     return GRANULARITY_MIN
 
@@ -180,7 +180,7 @@ def validate_and_fix_refinement_edges(
             fixed_edges.append(edge)
             continue
 
-        logger.warning(
+        _logger.warning(
             f"INSP_REFINES 粒度跳跃 {edge.from_id}(g={from_g}) -> {edge.to_id}(g={to_g})，"
             f"期望 {from_g} -> {from_g + 1}"
         )
@@ -196,7 +196,7 @@ def validate_and_fix_refinement_edges(
                     break
 
             if bridge_id:
-                logger.warning(
+                _logger.warning(
                     f"  找到中间节点 {bridge_id}(g={gran_map[bridge_id]})，"
                     f"拆分为 {edge.from_id} -> {bridge_id} -> {edge.to_id}"
                 )
@@ -217,7 +217,7 @@ def validate_and_fix_refinement_edges(
                     )
                 )
             else:
-                logger.warning("  未找到中间粒度节点，降级为 INSP_COMBINES")
+                _logger.warning("  未找到中间粒度节点，降级为 INSP_COMBINES")
                 fixed_edges.append(
                     Edge(
                         from_id=edge.from_id,
@@ -227,7 +227,7 @@ def validate_and_fix_refinement_edges(
                     )
                 )
         else:
-            logger.warning("  粒度非递增，降级为 INSP_COMBINES")
+            _logger.warning("  粒度非递增，降级为 INSP_COMBINES")
             fixed_edges.append(
                 Edge(
                     from_id=edge.from_id,
