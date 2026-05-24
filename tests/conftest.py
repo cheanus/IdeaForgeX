@@ -10,6 +10,9 @@ from src.neo4j.client import Neo4jClient
 from src.neo4j.maintenance import clear_graph
 from src.neo4j.schema import ensure_schema
 
+# 隔离测试用 SQLite 论文库，避免污染业务 data/trained_papers.db
+os.environ["IDEAFORGEX_PAPER_LIBRARY_PATH"] = "data/test_papers.db"
+
 _TEST_NEO4J_CONFIG: dict[str, Any] = {
     "neo4j_uri": "bolt://localhost:7687",
     "neo4j_user": "",
