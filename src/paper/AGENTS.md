@@ -25,11 +25,11 @@ class AMinerClient:
     # ── 论文发现 ──
 
     def search_papers(self, query: str, limit: int = 50) -> list[dict]:
-        """paper_qa_search: 语义搜索论文"""
+        """paper_search: 标题搜索论文"""
         resp = httpx.post(
-            f"{self.base_url}/api/paper/qa/search",
+            f"{self.base_url}/api/paper/search",
             headers=self.headers,
-            json={"query": query, "size": limit, "sci_flag": True}
+            json={"page": 1, "size": limit, "title": query}
         )
         return resp.json()["data"]
 
@@ -57,7 +57,7 @@ class AMinerClient:
 
 | 操作 | API | 单价 | 使用频率 |
 |---|---|---|---|
-| 按主题发现论文 | `paper_qa_search` | ¥0.05 | 训练阶段，每批一次 |
+| 按主题发现论文 | `paper_search` | ¥0.05 | 训练阶段，每批一次 |
 | 批量获取摘要 | `paper_info` | **免费** | 训练阶段，每批一次 |
 | 单篇详细元数据 | `paper_detail` | ¥0.01 | 按需，仅目标论文 |
 
