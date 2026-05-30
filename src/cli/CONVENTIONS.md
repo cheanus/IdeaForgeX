@@ -29,23 +29,19 @@ CLI 暴露知识图谱的查询层。生成创新点、多轮交互、论文发�
 
 ### retrieve 输出
 
-瘦身格式，仅含节点识别信息和检索质量元数据。agent 根据 `core_description` 和 `source` 判断哪些节点值得深入，再通过 `inspect` 获取全字段 + 精化链 + 边详情：
+瘦身格式，仅含节点识别信息和检索质量元数据。agent 根据 `core_description` 和 `source` 判断哪些节点值得深入：
 
 - `id` / `type` / `score` / `source` / `granularity` / `core_description` — 节点核心字段
-- `source` — 来源标记：`vector`(向量命中)、`chain`(精化链展开)、`1-hop`/`2-hop`(图扩展)，agent 据此加权信任度
-- `meta.total_hits` — 检索命中总数，agent 据此判断检索质量
+- `source` — 来源标记：`vector`(向量命中)、`chain`(精化链展开)、`1-hop`/`2-hop`(图扩展)
+- `meta.total_hits` — 检索命中总数
 
 ### inspect 输出
 
-节点/边全字段展开：
-
-- 节点所有属性完整输出
-- `chain` — 内联精化链（按粒度升序），`direction` 标注 self/coarser/finer
-- 边的 `target` 展开为 mini-inspect（id / type / core_description / 关键字段）
+全字段展开：节点所有属性完整输出；`chain` 内联精化链（按粒度升序，`direction` 标注 self/coarser/finer）；边的 `target` 展开为 mini-inspect。
 
 ### random 输出
 
-与 `retrieve` 瘦身格式一致，`source` 标记为 `random`（纯随机）或 `random-weighted`（主题加权）。顶层多一个 `mode` 字段。
+与 `retrieve` 瘦身格式一致，`source` 标记为 `random` 或 `random-weighted`，顶层多一个 `mode` 字段。
 
 ### relate 输出
 
@@ -53,9 +49,7 @@ CLI 暴露知识图谱的查询层。生成创新点、多轮交互、论文发�
 
 ## 文件职责
 
-| 文件 | 职责 |
-|---|---|
-| `queries.py` | `cmd_retrieve` / `cmd_inspect` / `cmd_random` / `cmd_relate` 函数实现 + 输出格式化 |
+`queries.py` 包含 `cmd_retrieve` / `cmd_inspect` / `cmd_random` / `cmd_relate` 函数实现 + 输出格式化。
 
 ## 实现约定
 

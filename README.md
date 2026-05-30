@@ -1,6 +1,6 @@
 # IdeaForgeX
 
-[English](README.md) | [简体中文](docs/README_zh.md)
+[English](README.md) | [简体中文](README_zh.md)
 
 **Open-source knowledge graph for AI research ideas.** Train by feeding papers and let LLMs distill reusable method inspirations and research questions into a Neo4j graph. At inference time, external AI agents query the graph via CLI to compose novel research directions.
 
@@ -85,7 +85,7 @@ uv run python main.py random --query "cross-modal attention" --count 3
 uv run python main.py relate INSP_1 INSP_10
 ```
 
-For detailed CLI reference, see [`docs/use_cli.md`](docs/use_cli.md).
+For CLI usage guide, see [`docs/use_cli.md`](docs/use_cli.md). For full JSON schemas, see [`docs/superpowers/specs/2025-05-30-cli-spec.md`](docs/superpowers/specs/2025-05-30-cli-spec.md).
 
 ### Graph Reset
 

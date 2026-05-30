@@ -1,10 +1,10 @@
 # IdeaForgeX
 
-[English](../README.md) | [简体中文](README_zh.md)
+[English](README.md) | [简体中文](README_zh.md)
 
 **AI 论文创新点知识图谱系统** — 开源。训练时喂论文，让 LLM 提炼可复用的方法灵感和研究问题，写入 Neo4j 知识图谱；推理时外部 AI agent 通过 CLI 查询图数据，自行编排研究方向。
 
-[![License](https://img.shields.io/badge/license-AGPLv3-blue)](../LICENSE)
+[![License](https://img.shields.io/badge/license-AGPLv3-blue)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
 [![Neo4j](https://img.shields.io/badge/neo4j-community-green)](https://neo4j.com/)
 [![LangGraph](https://img.shields.io/badge/framework-langgraph-orange)](https://langchain-ai.github.io/langgraph/)
@@ -85,7 +85,7 @@ uv run python main.py random --query "跨模态注意力" --count 3
 uv run python main.py relate INSP_1 INSP_10
 ```
 
-CLI 详细规范见 [`docs/use_cli.md`](use_cli.md)。
+CLI 使用指南见 [`docs/use_cli.md`](docs/use_cli.md)。完整 JSON schema 见 [`docs/superpowers/specs/2025-05-30-cli-spec.md`](docs/superpowers/specs/2025-05-30-cli-spec.md)。
 
 ### 重置图
 
@@ -121,7 +121,7 @@ uv run pytest -v
 
 ## 许可证
 
-本项目采用 GNU AGPLv3 许可。详见 [`LICENSE`](../LICENSE)。
+本项目采用 GNU AGPLv3 许可。详见 [`LICENSE`](LICENSE)。
 
 ## 贡献
 

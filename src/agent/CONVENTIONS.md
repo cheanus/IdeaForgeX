@@ -41,7 +41,7 @@ builder.add_node("load_paper", load_paper)
 builder.add_node("check_duplicate", check_duplicate)     # SQLite try_reserve
 builder.add_node("generate_query", generate_query)       # LLM 调用 1
 builder.add_node("retrieve", retrieve)                    # 无 LLM
-builder.add_node("llm_a_judge", node_llm_a)               # LLM 调用 2 (RetryPolicy)
+builder.add_node("llm_a_judge", node_llm_a)               # LLM 调用 2
 builder.add_node("commit_candidates", commit_candidates)
 builder.add_node("skip", skip_training)
 
@@ -62,6 +62,8 @@ builder.add_edge("commit_candidates", END)
 
 ### check_duplicate 去重
 
+`try_reserve()` 是原子操作（`INSERT OR IGNORE`），一次完成检查+预留，避免并发竞态：
+
 ```python
 def check_duplicate(state):
     if not paper_library.try_reserve(paper_id, title, year):
@@ -69,57 +71,26 @@ def check_duplicate(state):
     return {"already_trained": False}
 ```
 
-`try_reserve()` 是原子操作（`INSERT OR IGNORE`），一次完成检查+预留，避免并发竞态。
-
 ### commit_candidates 写入顺序
 
-```python
-def commit_candidates(state):
-    if state.get("can_infer"):
-        return {}          # True=可直接推断，无需提取新知识
-    # LLM 生成的节点 ID 加 paper_id 前缀防并发冲突
-    prefix = f"{paper_id}__"
-    for node in inspirations + questions:
-        node.id = prefix + node.id
-    # 边 from_id/to_id 同步加前缀
-    ...
-    with session:
-        if node_updates:
-            session.execute_write(batch_update, node_updates)    # MATCH + SET（先更新）
-        if inspirations or questions:
-            session.execute_write(batch_write, ...)              # CREATE（后新增）
-```
+1. 先执行 `node_updates`（MATCH + SET 更新已有节点）
+2. 再执行 `inspirations` / `questions` 创建（CREATE 新节点）
+3. LLM 生成的节点 ID 加 paper_id 前缀防并发冲突
 
 ## 节点编写规则
 
 - 每个节点是纯函数：`(state) -> dict`，返回需要更新的字段。
-- 不要在节点内直接读写文件——通过 `paper/extractor.py` 或 `neo4j/` 模块。
+- 不要在节点内直接读写文件——通过 `paper/` 或 `neo4j/` 模块。
 - LLM 调用通过 `llm/client.py` 的 `ChatClient`，不直接调 `openai`。
 - 节点函数签名中 state 参数使用完整的 State TypedDict 类型注解。
 
 ## RetryPolicy
 
-```python
-from langgraph.types import RetryPolicy
-
-builder.add_node("llm_a_judge", node_llm_a, retry_policy=RetryPolicy(max_attempts=3))
-```
-
-仅 LLM 调用节点需要 RetryPolicy。确定性节点（如 `extract`、`neo4j_write`）不需要。
+仅 LLM 调用节点需要，确定性节点不需要。通过 `langgraph.types.RetryPolicy(max_attempts=3)` 配置。
 
 ## Checkpointer
 
-```python
-from langgraph.checkpoint.memory import MemorySaver
-
-    graph = builder.compile(checkpointer=MemorySaver())
-    config = {"configurable": {"thread_id": paper_id}}
-
-    # 执行
-    result = graph.invoke(initial_state, config)
-```
-
-用 `thread_id = paper_id` 保证每篇论文独立 checkpoint。
+用 `MemorySaver`，`thread_id = paper_id` 保证每篇论文独立 checkpoint。
 
 ## 文件组织
 
