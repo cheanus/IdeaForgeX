@@ -108,6 +108,8 @@ load_paper → check_duplicate → {skip | generate_query → retrieve
 
 写入顺序：先 `MATCH+SET` 更新已有节点，再 `CREATE` 新节点和边。
 
+并发安全：`check_duplicate` 通过 `CREATE Paper` + uniqueness constraint 实现原子预留，两个并发训练同一论文时第二个触发 `ConstraintError` 直接跳过。节点 ID 通过 `paper_id` 前缀天然隔离。
+
 ## 7. 推理流程
 
 推理不在 IdeaForgeX 内部完成。外部 agent 通过 CLI 命令编排创新点生成：

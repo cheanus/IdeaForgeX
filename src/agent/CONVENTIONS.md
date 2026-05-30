@@ -62,20 +62,26 @@ builder.add_edge("commit_candidates", END)
 
 ### check_duplicate 去重
 
-`try_reserve()` 是原子操作（`INSERT OR IGNORE`），一次完成检查+预留，避免并发竞态：
+利用 `Paper` 节点的 uniqueness constraint 实现原子预留，支持并发训练：
 
 ```python
 def check_duplicate(state):
-    if not paper_library.try_reserve(paper_id, title, year):
-        return {"already_trained": True}
-    return {"already_trained": False}
+    with neo4j_client.session() as session:
+        try:
+            session.run("CREATE (p:Paper {id: ...})", id=paper_node_id)
+            return {"already_trained": False}
+        except ConstraintError:
+            return {"already_trained": True}
 ```
+
+`CREATE` 只能成功一次——第二个并发进程触发 `ConstraintError`，直接跳过。`commit_candidates` 中再 `MATCH + SET` 更新占位 Paper 为真实数据。
 
 ### commit_candidates 写入顺序
 
-1. 先执行 `node_updates`（MATCH + SET 更新已有节点）
-2. 再执行 `inspirations` / `questions` 创建（CREATE 新节点）
-3. LLM 生成的节点 ID 加 paper_id 前缀防并发冲突
+1. 更新 Paper 节点（MATCH + SET，占位符已在 check_duplicate 创建）
+2. 若 `node_updates`：batch_update + 创建 PAPER_CONTRIBUTES 边
+3. 创建新节点（Inspiration/Question）+ 边 + PAPER_CONTRIBUTES 边
+4. LLM 生成的节点 ID 加 paper_id 前缀防并发冲突
 
 ## 节点编写规则
 
