@@ -4,7 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.models import Edge, InspirationNode, NodeUpdate, QuestionNode, RelationType
+from src.models import (
+    Edge,
+    InspirationNode,
+    NodeUpdate,
+    PaperNode,
+    QuestionNode,
+    RelationType,
+)
 from src.neo4j.client import Neo4jClient
 
 
@@ -15,6 +22,9 @@ def ensure_schema(client: Neo4jClient) -> None:
         )
         session.run(
             "CREATE CONSTRAINT q_id_unique IF NOT EXISTS FOR (n:Question) REQUIRE n.id IS UNIQUE"
+        )
+        session.run(
+            "CREATE CONSTRAINT paper_id_unique IF NOT EXISTS FOR (n:Paper) REQUIRE n.id IS UNIQUE"
         )
         session.run(
             """
@@ -44,6 +54,33 @@ def _node_to_props(node: InspirationNode | QuestionNode) -> dict[str, Any]:
     return node.model_dump(exclude={"type"})
 
 
+def create_paper(tx, paper: PaperNode) -> None:
+    tx.run(
+        """
+        MERGE (p:Paper {id: $id})
+        ON CREATE SET p.title = $title, p.year = $year, p.abstract = $abstract, p.trained_at = $trained_at
+        ON MATCH SET p.title = $title, p.year = $year, p.abstract = $abstract, p.trained_at = $trained_at
+        """,
+        id=paper.id,
+        title=paper.title,
+        year=paper.year,
+        abstract=paper.abstract,
+        trained_at=paper.trained_at,
+    )
+
+
+def create_paper_contributes_edge(tx, paper_id: str, node_id: str) -> None:
+    tx.run(
+        """
+        MATCH (p:Paper {id: $paper_id})
+        MATCH (n {id: $node_id})
+        MERGE (p)-[:PAPER_CONTRIBUTES {weight: 1.0}]->(n)
+        """,
+        paper_id=paper_id,
+        node_id=node_id,
+    )
+
+
 def create_inspiration(tx, node: InspirationNode) -> None:
     tx.run(
         """
@@ -53,8 +90,7 @@ def create_inspiration(tx, node: InspirationNode) -> None:
             核心描述: $核心描述,
             向量: $向量,
             前提条件: $前提条件,
-            操作步骤: $操作步骤,
-            已知实例: $已知实例
+            操作步骤: $操作步骤
         })
         """,
         **_node_to_props(node),
@@ -139,21 +175,8 @@ def batch_update(tx, updates: list[NodeUpdate]) -> None:
         update_node(tx, upd)
 
 
-def append_known_instance(tx, node_ids: list[str], entry: str) -> None:
-    """追加已知实例到已有节点，去重。"""
-    for node_id in node_ids:
-        tx.run(
-            """
-            MATCH (n {id: $node_id})
-            WHERE n.已知实例 IS NULL OR NOT n.已知实例 CONTAINS $entry
-            SET n.已知实例 = coalesce(n.已知实例 + '; ', '') + $entry
-            """,
-            node_id=node_id,
-            entry=entry,
-        )
-
-
 def reset_practice_graph(client: Neo4jClient) -> None:
     with client.session() as session:
         session.run("MATCH (n:Inspiration) DETACH DELETE n")
         session.run("MATCH (n:Question) DETACH DELETE n")
+        session.run("MATCH (n:Paper) DETACH DELETE n")

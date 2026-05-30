@@ -30,7 +30,7 @@ def _format_retrieved_nodes(nodes: list[dict[str, Any]], detailed: bool = False)
         line = f"  {node_id} (score={score:.2f}) [{grain_or_type}] {desc}"
         if detailed:
             extras: list[str] = []
-            for field in ("前提条件", "操作步骤", "已知实例", "当前现状", "未解决部分"):
+            for field in ("前提条件", "操作步骤", "当前现状", "未解决部分"):
                 val = n.get(field, "")
                 if val:
                     extras.append(f"{field}={val}")

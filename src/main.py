@@ -7,12 +7,17 @@ import json
 import logging
 
 from src.agent.training import build_training_graph, run_training
-from src.cli.queries import cmd_inspect, cmd_random, cmd_relate, cmd_retrieve
+from src.cli.queries import (
+    cmd_delete_node,
+    cmd_inspect,
+    cmd_random,
+    cmd_relate,
+    cmd_retrieve,
+)
 from src.config import load_config
 from src.llm.client import ChatClient
 from src.neo4j.client import create_client
 from src.neo4j.schema import ensure_schema, reset_practice_graph
-from src.paper.library import PaperLibrary
 
 _logger = logging.getLogger("ideaforgex")
 
@@ -61,6 +66,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="不展开边目标节点详情",
     )
 
+    delete_node = subparsers.add_parser("delete-node")
+    delete_node.add_argument(
+        "id", help="节点 ID（Paper / Inspiration / Question 统一接口）"
+    )
+
     subparsers.add_parser("stats")
 
     random_ = subparsers.add_parser("random")
@@ -97,8 +107,7 @@ def main() -> None:
         if args.command == "reset":
             _logger.info("开始清空实践库 …")
             reset_practice_graph(neo4j_client)
-            PaperLibrary(config.paper_library_path).clear()
-            _logger.info("已清空实践库和论文库")
+            _logger.info("已清空实践库")
             return
         if args.command == "train":
             _logger.info("开始训练，论文 ID: %s", args.paper)
@@ -131,6 +140,15 @@ def main() -> None:
                 args.id,
                 expand_edges=args.expand_edges,
             )
+            _json_print(result)
+            return
+        if args.command == "delete-node":
+            _logger.info("正在删除节点: %s", args.id)
+            result = cmd_delete_node(neo4j_client, args.id)
+            if result.get("deleted"):
+                _logger.info("节点已删除: %s", args.id)
+            else:
+                _logger.warning("删除失败: %s", result.get("error", "未知错误"))
             _json_print(result)
             return
         if args.command == "random":

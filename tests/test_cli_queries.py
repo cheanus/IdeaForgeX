@@ -15,7 +15,6 @@ FAKE_INSP_NODE = {
     "核心描述": "基于注意力机制的序列建模范式",
     "前提条件": "序列长度适中，有足够训练数据",
     "操作步骤": "1) 计算 self-attention 2) 多头聚合 3) 残差归一化",
-    "已知实例": "Transformer (NeurIPS 2017), BERT (NAACL 2019)",
     "向量": [0.1, 0.2],
 }
 FAKE_QUESTION_NODE = {
@@ -27,6 +26,9 @@ FAKE_QUESTION_NODE = {
     "未解决部分": "长程依赖与计算效率的平衡仍未彻底解决",
     "向量": [0.3, 0.4],
 }
+FAKE_PAPERS = [
+    {"id": "paper-1706.03762", "title": "Attention Is All You Need", "year": "2017"},
+]
 FAKE_CHAIN_INSP = [
     {"id": "insp-g0", "粒度": 0, "核心描述": "序列建模"},
     {"id": "insp-001", "粒度": 1, "核心描述": "基于注意力机制的序列建模范式"},
@@ -114,8 +116,8 @@ def test_cmd_retrieve_format(monkeypatch):
 
     result = cmd_retrieve(
         config,
-        FakeLLMClient(),  # type: ignore[reportArgumentType]
-        SimpleNamespace(),  # type: ignore[reportArgumentType]
+        FakeLLMClient(),
+        SimpleNamespace(),
         "使用注意力机制做序列建模",
     )
 
@@ -126,7 +128,6 @@ def test_cmd_retrieve_format(monkeypatch):
 
     assert len(result["nodes"]) == 2
 
-    # Inspiration 节点
     insp = result["nodes"][0]
     assert insp["id"] == "insp-001"
     assert insp["type"] == "Inspiration"
@@ -134,12 +135,10 @@ def test_cmd_retrieve_format(monkeypatch):
     assert insp["source"] == "vector"
     assert insp["granularity"] == 1
     assert insp["core_description"] == "基于注意力机制的序列建模范式"
-    # 瘦身输出不应包含 snippet / chain / edges
     assert "snippet" not in insp
     assert "chain" not in insp
     assert "edges" not in insp
 
-    # Question 节点
     q = result["nodes"][1]
     assert q["id"] == "q-001"
     assert q["type"] == "Question"
@@ -169,8 +168,11 @@ def test_cmd_inspect_inspiration_node(monkeypatch):
         ],
     )
     monkeypatch.setattr("src.cli.queries._get_edges_for_node", lambda c, nid: [])
+    monkeypatch.setattr(
+        "src.cli.queries._get_papers_for_node", lambda c, nid: FAKE_PAPERS
+    )
 
-    results = cmd_inspect(fake_neo4j, "insp-001")  # type: ignore[reportArgumentType]
+    results = cmd_inspect(fake_neo4j, "insp-001")
 
     assert len(results) == 1
     node_output = results[0]["node"]
@@ -180,7 +182,7 @@ def test_cmd_inspect_inspiration_node(monkeypatch):
     assert node_output["core_description"] == "基于注意力机制的序列建模范式"
     assert node_output["前提条件"] == "序列长度适中，有足够训练数据"
     assert node_output["操作步骤"] == "1) 计算 self-attention 2) 多头聚合 3) 残差归一化"
-    assert node_output["已知实例"] == "Transformer (NeurIPS 2017), BERT (NAACL 2019)"
+    assert node_output["papers"] == FAKE_PAPERS
     assert len(results[0]["chain"]) == 3
 
 
@@ -191,8 +193,11 @@ def test_cmd_inspect_question_node(monkeypatch):
 
     monkeypatch.setattr("src.cli.queries._get_edges_for_node", lambda c, nid: [])
     monkeypatch.setattr("src.cli.queries._build_chain", lambda node, client: [])
+    monkeypatch.setattr(
+        "src.cli.queries._get_papers_for_node", lambda c, nid: FAKE_PAPERS
+    )
 
-    results = cmd_inspect(fake_neo4j, "q-001")  # type: ignore[reportArgumentType]
+    results = cmd_inspect(fake_neo4j, "q-001")
 
     assert len(results) == 1
     node_output = results[0]["node"]
@@ -202,6 +207,7 @@ def test_cmd_inspect_question_node(monkeypatch):
     assert node_output["问题类型"] == "工程瓶颈"
     assert node_output["当前现状"] == "已有稀疏注意力、线性注意力等方法"
     assert node_output["未解决部分"] == "长程依赖与计算效率的平衡仍未彻底解决"
+    assert node_output["papers"] == FAKE_PAPERS
     assert results[0]["chain"] == []
 
 
@@ -226,8 +232,11 @@ def test_cmd_inspect_edges_expanded(monkeypatch):
             for n, d in zip(FAKE_CHAIN_INSP, ["coarser", "self", "finer"])
         ],
     )
+    monkeypatch.setattr(
+        "src.cli.queries._get_papers_for_node", lambda c, nid: FAKE_PAPERS
+    )
 
-    results = cmd_inspect(fake_neo4j, "insp-001")  # type: ignore[reportArgumentType]
+    results = cmd_inspect(fake_neo4j, "insp-001")
 
     edges = results[0]["edges"]
     assert len(edges) == 2
@@ -248,7 +257,7 @@ def test_cmd_inspect_missing_node(monkeypatch):
     monkeypatch.setattr("src.cli.queries._get_edges_for_node", lambda c, nid: [])
     monkeypatch.setattr("src.cli.queries._build_chain", lambda node, client: [])
 
-    results = cmd_inspect(fake_neo4j, "nonexistent")  # type: ignore[reportArgumentType]
+    results = cmd_inspect(fake_neo4j, "nonexistent")
 
     assert len(results) == 1
     assert "error" in results[0]
@@ -281,9 +290,12 @@ def test_cmd_inspect_comma_separated_ids(monkeypatch):
         return []
 
     monkeypatch.setattr("src.cli.queries._get_edges_for_node", lambda c, nid: [])
+    monkeypatch.setattr(
+        "src.cli.queries._get_papers_for_node", lambda c, nid: FAKE_PAPERS
+    )
     monkeypatch.setattr("src.cli.queries._build_chain", fake_build_chain)
 
-    results = cmd_inspect(fake_neo4j, "a,b")  # type: ignore[reportArgumentType]
+    results = cmd_inspect(fake_neo4j, "a,b")
 
     assert len(results) == 2
     assert results[0]["node"]["id"] == "insp-001"
@@ -311,8 +323,8 @@ def test_cmd_random_pure(monkeypatch):
 
     result = cmd_random(
         config,
-        FakeLLMClient(),  # type: ignore[reportArgumentType]
-        SimpleNamespace(),  # type: ignore[reportArgumentType]
+        FakeLLMClient(),
+        SimpleNamespace(),
         count=1,
     )
 
@@ -344,8 +356,8 @@ def test_cmd_random_weighted(monkeypatch):
 
     result = cmd_random(
         config,
-        FakeLLMClient(),  # type: ignore[reportArgumentType]
-        SimpleNamespace(),  # type: ignore[reportArgumentType]
+        FakeLLMClient(),
+        SimpleNamespace(),
         count=1,
         query_text="扩散模型",
     )
@@ -389,7 +401,7 @@ def test_cmd_relate_connected(monkeypatch):
         "src.cli.queries.find_shortest_path", lambda c, f, t, max_len=6: path_result
     )
 
-    result = cmd_relate(SimpleNamespace(), "insp-001", "insp-002")  # type: ignore[reportArgumentType]
+    result = cmd_relate(SimpleNamespace(), "insp-001", "insp-002")
 
     assert result["connected"] is True
     assert result["hops"] == 2
@@ -407,7 +419,7 @@ def test_cmd_relate_disconnected(monkeypatch):
         lambda c, f, t, max_len=6: {"connected": False, "reason": "无路径"},
     )
 
-    result = cmd_relate(SimpleNamespace(), "insp-001", "q-999")  # type: ignore[reportArgumentType]
+    result = cmd_relate(SimpleNamespace(), "insp-001", "q-999")
 
     assert result["connected"] is False
     assert "reason" in result
@@ -429,7 +441,7 @@ def test_cmd_relate_same_node(monkeypatch):
         "src.cli.queries.find_shortest_path", lambda c, f, t, max_len=6: path_result
     )
 
-    result = cmd_relate(SimpleNamespace(), "insp-001", "insp-001")  # type: ignore[reportArgumentType]
+    result = cmd_relate(SimpleNamespace(), "insp-001", "insp-001")
 
     assert result["connected"] is True
     assert result["hops"] == 0

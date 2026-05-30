@@ -10,9 +10,6 @@ from src.neo4j.client import Neo4jClient
 from src.neo4j.maintenance import clear_graph
 from src.neo4j.schema import ensure_schema
 
-# 隔离测试用 SQLite 论文库，避免污染业务 data/trained_papers.db
-os.environ["IDEAFORGEX_PAPER_LIBRARY_PATH"] = "data/test_papers.db"
-
 _TEST_NEO4J_CONFIG: dict[str, Any] = {
     "neo4j_uri": "bolt://localhost:7687",
     "neo4j_user": "",
@@ -22,14 +19,10 @@ _TEST_NEO4J_CONFIG: dict[str, Any] = {
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "neo4j: requires Neo4j test container")
-    try:
-        os.remove("data/test_papers.db")
-    except FileNotFoundError:
-        pass
 
 
 def _make_test_client() -> Neo4jClient:
-    return Neo4jClient(Config(**_TEST_NEO4J_CONFIG))  # type: ignore[reportArgumentType]
+    return Neo4jClient(Config(**_TEST_NEO4J_CONFIG))
 
 
 @pytest.fixture

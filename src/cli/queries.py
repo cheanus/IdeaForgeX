@@ -1,4 +1,4 @@
-"""retrieve / inspect / random / relate 命令实现。"""
+"""retrieve / inspect / random / relate / delete-node 命令实现。"""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from typing import Any
 from src.config import Config
 from src.llm.client import ChatClient
 from src.neo4j.client import Neo4jClient
+from src.neo4j.maintenance import delete_node_cascade as _delete_node_cascade
 from src.neo4j.retrieval import (
     expand_refinement_chain,
     find_shortest_path,
@@ -20,9 +21,10 @@ EDGE_TYPE_LABELS: dict[str, str] = {
     "INSP_COMBINES": "灵感组合边",
     "INSP_QUESTION": "灵感问题边",
     "QUESTION_COMBINES": "问题组合边",
+    "PAPER_CONTRIBUTES": "论文贡献边",
 }
 QUESTION_FIELDS: list[str] = ["问题类型", "当前现状", "未解决部分"]
-INSPIRATION_FIELDS: list[str] = ["前提条件", "操作步骤", "已知实例"]
+INSPIRATION_FIELDS: list[str] = ["前提条件", "操作步骤"]
 
 _logger = logging.getLogger("ideaforgex")
 
@@ -57,7 +59,7 @@ def _build_chain(node: dict[str, Any], client: Neo4jClient) -> list[dict[str, An
 def _get_edges_for_node(client: Neo4jClient, node_id: str) -> list[dict[str, Any]]:
     query = """
     MATCH (n {id: $node_id})-[r]-(m)
-    WHERE type(r) IN ['INSP_COMBINES','INSP_QUESTION','QUESTION_COMBINES']
+    WHERE type(r) IN ['INSP_COMBINES','INSP_QUESTION','QUESTION_COMBINES','PAPER_CONTRIBUTES']
     RETURN type(r) AS rel_type, r.weight AS weight, m AS target, labels(m)[0] AS target_type
     ORDER BY weight DESC
     """
@@ -71,6 +73,20 @@ def _get_edges_for_node(client: Neo4jClient, node_id: str) -> list[dict[str, Any
                 | {"type": record.get("target_type", "")},
             }
             for record in result
+        ]
+
+
+def _get_papers_for_node(client: Neo4jClient, node_id: str) -> list[dict[str, Any]]:
+    """查找与指定节点关联的论文节点。"""
+    query = """
+    MATCH (p:Paper)-[:PAPER_CONTRIBUTES]->(n {id: $node_id})
+    RETURN p.id AS id, p.title AS title, p.year AS year
+    """
+    with client.session() as session:
+        records = session.run(query, node_id=node_id)
+        return [
+            {"id": record["id"], "title": record["title"], "year": record["year"]}
+            for record in records
         ]
 
 
@@ -162,9 +178,16 @@ def cmd_inspect(
             node["granularity"] = raw_node.get("粒度")
             for f in INSPIRATION_FIELDS:
                 node[f] = raw_node.get(f, "")
+            node["papers"] = _get_papers_for_node(neo4j_client, node_id)
         elif type_label == "Question":
             for f in QUESTION_FIELDS:
                 node[f] = raw_node.get(f, "")
+            node["papers"] = _get_papers_for_node(neo4j_client, node_id)
+        elif type_label == "Paper":
+            node["title"] = raw_node.get("title", "")
+            node["year"] = raw_node.get("year", "")
+            node["abstract"] = raw_node.get("abstract", "")
+            node["trained_at"] = raw_node.get("trained_at", "")
 
         chain = _build_chain(raw_node, neo4j_client)
 
@@ -182,6 +205,9 @@ def cmd_inspect(
                     tgt_summary["granularity"] = tgt.get("粒度")
                 elif tgt_type == "Question" and tgt.get("问题类型"):
                     tgt_summary["问题类型"] = tgt["问题类型"]
+                elif tgt_type == "Paper":
+                    tgt_summary["title"] = tgt.get("title", "")
+                    tgt_summary["year"] = tgt.get("year", "")
                 edges_out.append(
                     {
                         "type": EDGE_TYPE_LABELS.get(e["type"], e["type"]),
@@ -238,3 +264,10 @@ def cmd_relate(
     result = find_shortest_path(neo4j_client, from_id, to_id, max_len)
     result["meta"] = {"runtime_ms": int((time.monotonic() - t0) * 1000)}
     return result
+
+
+def cmd_delete_node(
+    neo4j_client: Neo4jClient,
+    node_id: str,
+) -> dict[str, Any]:
+    return _delete_node_cascade(neo4j_client, node_id)

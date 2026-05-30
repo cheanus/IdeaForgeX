@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from typing import Annotated
 
 from langgraph.checkpoint.memory import MemorySaver
@@ -20,11 +21,15 @@ from src.config import Config
 from src.llm.client import ChatClient
 from src.llm.prompts import build_llm_a_judge_messages, build_query_generation_messages
 from src.llm.service import call_with_retry
-from src.models import Edge, InspirationNode, NodeUpdate, QuestionNode
+from src.models import Edge, InspirationNode, NodeUpdate, PaperNode, QuestionNode
 from src.neo4j.client import Neo4jClient
 from src.neo4j.retrieval import retrieve_with_traversal
-from src.neo4j.schema import append_known_instance, batch_update, batch_write
-from src.paper.library import PaperLibrary
+from src.neo4j.schema import (
+    batch_update,
+    batch_write,
+    create_paper,
+    create_paper_contributes_edge,
+)
 from src.paper.resolver import build_practice_summary, resolve_paper_spec
 
 _logger = logging.getLogger("ideaforgex")
@@ -48,17 +53,20 @@ class TrainingState(TypedDict, total=False):
     messages: Annotated[list, add_messages]
 
 
-def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4jClient):
-    paper_library = PaperLibrary(config.paper_library_path)
+def _make_paper_id(raw_id: str) -> str:
+    """将原始论文 ID 转为 Paper 节点 ID。"""
+    return f"paper-{raw_id}"
 
+
+def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4jClient):
     def load_paper(state: TrainingState) -> dict:
         paper_text = state.get("paper_text", "")
         if paper_text:
             return {}
-        paper_id = state["paper_id"]  # type: ignore[reportTypedDictNotRequiredAccess]
-        _logger.info("正在获取论文摘要 …")
+        paper_id = state["paper_id"]
+        _logger.info("正在获取论文 …")
         record = resolve_paper_spec(config, paper_id)
-        _logger.info("论文摘要获取完成: %s", record["title"])
+        _logger.info("论文获取完成: %s", record["title"])
         return {
             "paper_id": record["paper_id"],
             "paper_title": record["title"],
@@ -67,9 +75,13 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
         }
 
     def check_duplicate(state: TrainingState) -> dict:
-        paper_id = state["paper_id"]  # type: ignore[reportTypedDictNotRequiredAccess]
-        if paper_library.is_trained(paper_id):
-            _logger.info("论文已训练，跳过: %s", paper_id)
+        paper_node_id = _make_paper_id(state["paper_id"])
+        with neo4j_client.session() as session:
+            exists = session.run(
+                "MATCH (p:Paper {id: $id}) RETURN p", id=paper_node_id
+            ).single()
+        if exists:
+            _logger.info("论文已训练，跳过: %s", state["paper_id"])
             return {"already_trained": True}
         return {"already_trained": False}
 
@@ -78,7 +90,7 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
 
     def generate_query(state: TrainingState) -> dict:
         _logger.info("正在生成检索查询 …")
-        messages = build_query_generation_messages(state["paper_text"])  # type: ignore[reportTypedDictNotRequiredAccess]
+        messages = build_query_generation_messages(state["paper_text"])
         result = call_with_retry(
             client,
             messages,
@@ -91,7 +103,7 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
 
     def retrieve(state: TrainingState) -> dict:
         _logger.info("正在检索知识图谱 …")
-        embeddings = client.embed([state["query_text"]])  # type: ignore[reportTypedDictNotRequiredAccess]
+        embeddings = client.embed([state["query_text"]])
         nodes = retrieve_with_traversal(neo4j_client, embeddings[0], config)
         _logger.info("知识图谱检索完成，命中 %d 条", len(nodes))
         return {"retrieved_nodes": nodes}
@@ -100,11 +112,11 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
         _logger.info("正在 LLM 分析，判断可提炼性 …")
         practice_summary = build_practice_summary(neo4j_client)
         messages = build_llm_a_judge_messages(
-            state["paper_text"],  # type: ignore[reportTypedDictNotRequiredAccess]
+            state["paper_text"],
             practice_summary,
             state.get("retrieved_nodes", []),
-            paper_title=state.get("paper_title", ""),  # type: ignore[reportTypedDictNotRequiredAccess]
-            paper_year=state.get("paper_year", ""),  # type: ignore[reportTypedDictNotRequiredAccess]
+            paper_title=state.get("paper_title", ""),
+            paper_year=state.get("paper_year", ""),
         )
         payload = call_with_retry(
             client,
@@ -130,16 +142,27 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
         return "commit_candidates"
 
     def commit_candidates(state: TrainingState) -> dict:
-        # can_infer=True  = 论文可直接推断（无需提取新知识）→ 跳过提交
-        # can_infer=False = 需要提取新节点 → 写入 Neo4j
         can_infer = state.get("can_infer", False)
-        paper_id = state["paper_id"]  # type: ignore[reportTypedDictNotRequiredAccess]
+        raw_paper_id = state["paper_id"]
+        paper_id = _make_paper_id(raw_paper_id)
         paper_title = state.get("paper_title", "")
         paper_year = state.get("paper_year", "")
+        paper_text = state.get("paper_text", "")
+
+        paper_node = PaperNode(
+            id=paper_id,
+            title=paper_title,
+            year=paper_year or "",
+            abstract=paper_text[:2000],
+            trained_at=datetime.now(timezone.utc).isoformat(),
+        )
+
         if can_infer:
-            _logger.info("可直接推断，无需提取新节点")
-            paper_library.try_reserve(paper_id, paper_title, paper_year)
+            _logger.info("可直接推断，仅登记论文")
+            with neo4j_client.driver.session(database=config.neo4j_database) as session:
+                session.execute_write(create_paper, paper_node)
             return {}
+
         _logger.info("正在提交候选人到图谱 …")
         inspirations = [
             InspirationNode.model_validate(item)
@@ -153,13 +176,12 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
             NodeUpdate.model_validate(item) for item in state.get("node_updates", [])
         ]
 
-        # 校验 INSP_REFINES 边的粒度递进约束
         edges = validate_and_fix_refinement_edges(
             edges, inspirations, state.get("retrieved_nodes", [])
         )
 
         # 为 LLM 生成的 ID 添加 paper_id 前缀，避免并发训练 ID 冲突
-        prefix = f"{paper_id}__"
+        prefix = f"{raw_paper_id}__"
         old_to_new: dict[str, str] = {}
 
         for insp in inspirations:
@@ -184,22 +206,26 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
             for j, emb in enumerate(real_embeddings[insp_count:]):
                 questions[j].向量 = emb
 
-        # 为新建灵感节点注入已知实例（当前论文即为实例）
-        paper_entry = f"{paper_title} ({paper_year})" if paper_year else paper_title
-        if paper_entry:
-            for n in inspirations:
-                n.已知实例 = paper_entry
-
         with neo4j_client.driver.session(database=config.neo4j_database) as session:
-            if node_updates:
-                session.execute_write(batch_update, node_updates)
-                updated_node_ids = [u.node_id for u in node_updates if u.node_id]
-                if updated_node_ids and paper_entry:
-                    session.execute_write(
-                        append_known_instance, updated_node_ids, paper_entry
-                    )
-            if inspirations or questions:
-                session.execute_write(batch_write, inspirations, questions, edges)
+
+            def _commit(tx) -> None:
+                create_paper(tx, paper_node)
+
+                if node_updates:
+                    batch_update(tx, node_updates)
+                    for upd in node_updates:
+                        if upd.node_id:
+                            create_paper_contributes_edge(tx, paper_id, upd.node_id)
+
+                if inspirations or questions:
+                    batch_write(tx, inspirations, questions, edges)
+                    for insp in inspirations:
+                        create_paper_contributes_edge(tx, paper_id, insp.id)
+                    for q in questions:
+                        create_paper_contributes_edge(tx, paper_id, q.id)
+
+            session.execute_write(_commit)
+
         _logger.info(
             "候选人提交完成: +%d 灵感, +%d 问题, +%d 边, 更新 %d 节点",
             len(inspirations),
@@ -207,7 +233,6 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
             len(edges),
             len(node_updates),
         )
-        paper_library.try_reserve(paper_id, paper_title, paper_year)
         return {}
 
     def skip_training(state: TrainingState) -> dict:

@@ -18,6 +18,7 @@ GRANULARITY_MAX: Literal[3] = 3
 class NodeType(str, Enum):
     inspiration = "Inspiration"
     question = "Question"
+    paper = "Paper"
 
 
 class RelationType(str, Enum):
@@ -25,6 +26,7 @@ class RelationType(str, Enum):
     insp_question = "INSP_QUESTION"
     question_combines = "QUESTION_COMBINES"
     insp_refines = "INSP_REFINES"
+    paper_contributes = "PAPER_CONTRIBUTES"
 
 
 class BaseGraphNode(BaseModel):
@@ -43,7 +45,6 @@ class InspirationNode(BaseGraphNode):
     粒度: Granularity = 1
     前提条件: str = ""
     操作步骤: str = ""
-    已知实例: str = ""
 
 
 class QuestionNode(BaseGraphNode):
@@ -51,6 +52,16 @@ class QuestionNode(BaseGraphNode):
     问题类型: str = "理论缺口"
     当前现状: str = ""
     未解决部分: str = ""
+
+
+class PaperNode(BaseModel):
+    """论文节点 — 元数据容器，不参与语义检索。"""
+
+    id: str
+    title: str
+    year: str = ""
+    abstract: str = ""
+    trained_at: str = ""
 
 
 class Edge(BaseModel):

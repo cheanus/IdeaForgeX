@@ -35,22 +35,46 @@ def _prefix_id(paper_id: str, node_id: str) -> str:
 
 
 def _mock_paper_not_trained(monkeypatch):
-    """模拟论文未训练：is_trained→False（走训练流程），try_reserve→True（commit 时标记成功）。"""
+    """模拟论文未训练：check_duplicate 返回 False。"""
     monkeypatch.setattr(
-        "src.agent.training.PaperLibrary.is_trained",
-        lambda self, paper_id: False,
+        "src.agent.training._make_paper_id",
+        lambda raw: f"paper-{raw}",
     )
+
+    # 让 Neo4j MATCH Paper 返回 None
+    def fake_session_run(*args, **kwargs):
+        class FakeResult:
+            def single(self):
+                return None
+
+        return FakeResult()
+
     monkeypatch.setattr(
-        "src.agent.training.PaperLibrary.try_reserve",
-        lambda self, paper_id, title, year="": True,
+        "src.agent.training.Neo4jClient.driver",
+        SimpleNamespace(),
     )
 
 
 def _mock_paper_already_trained(monkeypatch):
-    """模拟论文已训练：is_trained→True，触发跳过逻辑。"""
+    """模拟论文已训练：check_duplicate 返回 True，触发跳过逻辑。"""
+
+    class FakeRecord:
+        def __init__(self):
+            pass
+
+    class FakeResult:
+        def single(self):
+            return FakeRecord()
+
+    def fake_run(*args, **kwargs):
+        return FakeResult()
+
     monkeypatch.setattr(
-        "src.agent.training.PaperLibrary.is_trained",
-        lambda self, paper_id: True,
+        "src.agent.training.Neo4jClient.session",
+        lambda self: SimpleNamespace(
+            __enter__=lambda s: SimpleNamespace(run=fake_run),
+            __exit__=lambda *a: None,
+        ),
     )
 
 
@@ -58,7 +82,7 @@ def _mock_paper_already_trained(monkeypatch):
 def test_training_graph_routes_can_infer_to_commit_candidates(
     monkeypatch, neo4j_client
 ):
-    """验证 can_infer=True（可直接推断）时不创建节点。"""
+    """验证 can_infer=True（可直接推断）时创建 Paper 节点但不创建实践节点。"""
     config = Config(
         neo4j_database="neo4j",
         arxiv_short_abstract_threshold=200,
@@ -85,24 +109,10 @@ def test_training_graph_routes_can_infer_to_commit_candidates(
 
     monkeypatch.setattr("src.agent.training.call_with_retry", fake_call_with_retry)
 
-    monkeypatch.setattr(
-        "src.agent.training.PaperLibrary.is_trained",
-        lambda self, paper_id: False,
-    )
-
-    resolved_id = None
-
-    def track_resolve(self, paper_id, title, year=""):
-        nonlocal resolved_id
-        resolved_id = paper_id
-        return True
-
-    monkeypatch.setattr("src.agent.training.PaperLibrary.try_reserve", track_resolve)
-
     graph = build_training_graph(config, FakeEmbeddingClient(), neo4j_client)  # type: ignore[reportArgumentType]
     result = graph.invoke(
-        {"paper_id": TEST_PAPER_ID, "retry_count": 0},  # type: ignore[reportArgumentType]
-        {"configurable": {"thread_id": TEST_PAPER_ID}},
+        {"paper_id": "1706.03762", "retry_count": 0},  # type: ignore[reportArgumentType]
+        {"configurable": {"thread_id": "1706.03762"}},
     )
 
     assert result.get("paper_id") is not None
@@ -112,7 +122,15 @@ def test_training_graph_routes_can_infer_to_commit_candidates(
     assert result.get("already_trained") is False
     assert len(result["retrieved_nodes"]) == 1
     assert call_count[0] == 2
-    assert resolved_id is not None
+
+    with neo4j_client.driver.session(
+        database=neo4j_client.config.neo4j_database
+    ) as session:
+        paper = session.run(
+            "MATCH (p:Paper {id: 'paper-1706.03762'}) RETURN p"
+        ).single()
+        assert paper is not None
+        assert paper["p"]["title"] == ATTENTION_TITLE
 
 
 @pytest.mark.neo4j
@@ -159,17 +177,15 @@ def test_training_graph_commits_candidates_when_cannot_infer(monkeypatch, neo4j_
         raise RuntimeError(f"unexpected parser: {parser}")
 
     monkeypatch.setattr("src.agent.training.call_with_retry", fake_call_with_retry)
-    _mock_paper_not_trained(monkeypatch)
 
+    raw_paper_id = "1706.03762"
     graph = build_training_graph(config, FakeEmbeddingClient(), neo4j_client)  # type: ignore[reportArgumentType]
     result = graph.invoke(
-        {"paper_id": TEST_PAPER_ID, "retry_count": 0},  # type: ignore[reportArgumentType]
-        {"configurable": {"thread_id": TEST_PAPER_ID}},
+        {"paper_id": raw_paper_id, "retry_count": 0},  # type: ignore[reportArgumentType]
+        {"configurable": {"thread_id": raw_paper_id}},
     )
 
     assert result["can_infer"] is False
-    resolved_id = result.get("paper_id")
-    assert resolved_id is not None
 
     with neo4j_client.driver.session(
         database=neo4j_client.config.neo4j_database
@@ -181,19 +197,36 @@ def test_training_graph_commits_candidates_when_cannot_infer(monkeypatch, neo4j_
         assert insp_count == 1
         assert q_count == 1
 
+        full_insp_id = _prefix_id(raw_paper_id, "I1")
+        full_q_id = _prefix_id(raw_paper_id, "Q1")
+
         edge_record = session.run(
-            f"MATCH (a:Inspiration {{id: '{_prefix_id(resolved_id, 'I1')}'}})"
+            f"MATCH (a:Inspiration {{id: '{full_insp_id}'}})"
             f"-[r:INSP_QUESTION]->"
-            f"(b:Question {{id: '{_prefix_id(resolved_id, 'Q1')}'}}) "
+            f"(b:Question {{id: '{full_q_id}'}}) "
             "RETURN r.weight AS w"
         ).single()
         assert edge_record is not None
         assert edge_record["w"] == 0.8
 
+        # 验证 Paper 节点已创建
+        paper = session.run(
+            "MATCH (p:Paper {id: 'paper-1706.03762'}) RETURN p"
+        ).single()
+        assert paper is not None
+
+        # 验证 PAPER_CONTRIBUTES 边已创建
+        pc_count = session.run(
+            f"MATCH (p:Paper {{id: 'paper-1706.03762'}})"
+            f"-[r:PAPER_CONTRIBUTES]->(n) WHERE n.id IN ['{full_insp_id}', '{full_q_id}']"
+            "RETURN count(r) AS c"
+        ).single()["c"]
+        assert pc_count == 2
+
 
 @pytest.mark.neo4j
 def test_training_graph_commits_node_updates(monkeypatch, neo4j_client):
-    """验证 node_updates 能正确 SET 已有节点的属性。"""
+    """验证 node_updates 能正确 SET 已有节点的属性，并创建 Paper 节点和 PAPER_CONTRIBUTES 边。"""
     from src.neo4j.schema import create_inspiration
 
     config = Config(
@@ -206,7 +239,6 @@ def test_training_graph_commits_node_updates(monkeypatch, neo4j_client):
         id="insp-existing",
         核心描述="existing method",
         向量=_zero_vector(dim),
-        已知实例="old example",
     )
     with neo4j_client.driver.session(
         database=neo4j_client.config.neo4j_database
@@ -229,18 +261,17 @@ def test_training_graph_commits_node_updates(monkeypatch, neo4j_client):
             return LLMACandidate(
                 can_infer=False,
                 node_updates=[  # type: ignore[reportArgumentType]
-                    {"node_id": "insp-existing", "已知实例": "new example from paper"}
+                    {"node_id": "insp-existing", "前提条件": "new precondition"}
                 ],
             )
         raise RuntimeError(f"unexpected parser: {parser}")
 
     monkeypatch.setattr("src.agent.training.call_with_retry", fake_call_with_retry)
-    _mock_paper_not_trained(monkeypatch)
 
     graph = build_training_graph(config, FakeEmbeddingClient(), neo4j_client)  # type: ignore[reportArgumentType]
     result = graph.invoke(
-        {"paper_id": TEST_PAPER_ID, "retry_count": 0},  # type: ignore[reportArgumentType]
-        {"configurable": {"thread_id": TEST_PAPER_ID}},
+        {"paper_id": "1706.03762", "retry_count": 0},  # type: ignore[reportArgumentType]
+        {"configurable": {"thread_id": "1706.03762"}},
     )
 
     assert result["can_infer"] is False
@@ -249,15 +280,26 @@ def test_training_graph_commits_node_updates(monkeypatch, neo4j_client):
         database=neo4j_client.config.neo4j_database
     ) as session:
         records = session.run(
-            "MATCH (n:Inspiration {id: 'insp-existing'}) RETURN n.已知实例 AS ex"
+            "MATCH (n:Inspiration {id: 'insp-existing'}) RETURN n.前提条件 AS precond"
         ).data()
         assert len(records) == 1
-        assert records[0]["ex"] == "old example; Attention Is All You Need (2017)"
+        assert records[0]["precond"] == "new precondition"
+
+        # 验证 PAPER_CONTRIBUTES 边连接到了被更新的已有节点
+        pc = session.run(
+            "MATCH (p:Paper {id: 'paper-1706.03762'})"
+            "-[r:PAPER_CONTRIBUTES]->(n {id: 'insp-existing'})"
+            "RETURN count(r) AS c"
+        ).single()
+        assert pc["c"] == 1
 
 
 @pytest.mark.neo4j
 def test_training_graph_skips_duplicate(monkeypatch, neo4j_client):
     """验证论文已训练时跳过整个训练流程。"""
+    from src.neo4j.schema import create_paper
+    from src.models import PaperNode
+
     config = Config(
         neo4j_database="neo4j",
         arxiv_short_abstract_threshold=200,
@@ -265,7 +307,15 @@ def test_training_graph_skips_duplicate(monkeypatch, neo4j_client):
 
     monkeypatch.setattr("src.paper.resolver.AMinerClient", FakeAMinerClient)
     monkeypatch.setattr("src.paper.resolver.ArxivExtractor", FakeArxivExtractor)
-    _mock_paper_already_trained(monkeypatch)
+
+    # 预先在图中创建 Paper 节点，模拟已训练
+    with neo4j_client.driver.session(
+        database=neo4j_client.config.neo4j_database
+    ) as session:
+        session.execute_write(
+            create_paper,
+            PaperNode(id="paper-1706.03762", title=ATTENTION_TITLE, year="2017"),
+        )
 
     call_count = [0]
 
@@ -279,8 +329,8 @@ def test_training_graph_skips_duplicate(monkeypatch, neo4j_client):
 
     graph = build_training_graph(config, FakeEmbeddingClient(), neo4j_client)  # type: ignore[reportArgumentType]
     result = graph.invoke(
-        {"paper_id": TEST_PAPER_ID, "retry_count": 0},  # type: ignore[reportArgumentType]
-        {"configurable": {"thread_id": TEST_PAPER_ID}},
+        {"paper_id": "1706.03762", "retry_count": 0},  # type: ignore[reportArgumentType]
+        {"configurable": {"thread_id": "1706.03762"}},
     )
 
     assert result["already_trained"] is True
@@ -390,14 +440,12 @@ class TestValidateAndFixRefinementEdges:
         return [{"node": {"id": nid, "粒度": g}} for nid, g in items]
 
     def test_non_refinement_edges_pass_through(self):
-        """非 INSP_REFINES 边直接透传。"""
         edges = [self._edge("a", "b", RelationType.insp_question)]
         result = validate_and_fix_refinement_edges(edges, [], [])
         assert len(result) == 1
         assert result[0].rel_type == RelationType.insp_question
 
     def test_valid_refinement_passes_through(self):
-        """粒度 N→N+1 的精化边直接通过。"""
         edges = [self._edge("i1", "i2", RelationType.insp_refines)]
         inspirations = [self._insp("i1", 1), self._insp("i2", 2)]
         result = validate_and_fix_refinement_edges(edges, inspirations, [])
@@ -407,14 +455,12 @@ class TestValidateAndFixRefinementEdges:
         assert result[0].to_id == "i2"
 
     def test_missing_granularity_passes_through(self):
-        """未知粒度的边直接透传。"""
         edges = [self._edge("x", "y", RelationType.insp_refines)]
         result = validate_and_fix_refinement_edges(edges, [], [])
         assert len(result) == 1
         assert result[0].rel_type == RelationType.insp_refines
 
     def test_granularity_skip_with_retrieved_bridge(self):
-        """粒度跳跃但 retrieved 中有中间节点 → 拆分为两条边。"""
         edges = [self._edge("i1", "i3", RelationType.insp_refines)]
         inspirations = [self._insp("i1", 1), self._insp("i3", 3)]
         retrieved = self._retrieved([("bridge", 2)])
@@ -426,7 +472,6 @@ class TestValidateAndFixRefinementEdges:
         assert ids == {("i1", "bridge"), ("bridge", "i3")}
 
     def test_granularity_skip_with_new_inspiration_bridge(self):
-        """粒度跳跃但新的 Inspiration 中有中间节点 → 拆分为两条边。"""
         edges = [self._edge("i1", "i3", RelationType.insp_refines)]
         inspirations = [
             self._insp("i1", 1),
@@ -439,7 +484,6 @@ class TestValidateAndFixRefinementEdges:
         assert ids == {("i1", "bridge"), ("bridge", "i3")}
 
     def test_granularity_skip_no_bridge_downgraded(self):
-        """粒度跳跃且无中间节点 → 降级为 INSP_COMBINES。"""
         edges = [self._edge("i1", "i3", RelationType.insp_refines)]
         inspirations = [self._insp("i1", 1), self._insp("i3", 3)]
         result = validate_and_fix_refinement_edges(edges, inspirations, [])
@@ -447,7 +491,6 @@ class TestValidateAndFixRefinementEdges:
         assert result[0].rel_type == RelationType.insp_combines
 
     def test_non_increasing_granularity_downgraded(self):
-        """非递增粒度 → 降级为 INSP_COMBINES。"""
         edges = [self._edge("i3", "i1", RelationType.insp_refines)]
         inspirations = [self._insp("i3", 3), self._insp("i1", 1)]
         result = validate_and_fix_refinement_edges(edges, inspirations, [])
@@ -455,7 +498,6 @@ class TestValidateAndFixRefinementEdges:
         assert result[0].rel_type == RelationType.insp_combines
 
     def test_mixed_edges_correctly_handled(self):
-        """混合边类型：非精化边 + 合规精化边 + 违规边 各自正确处理。"""
         edges = [
             self._edge("a", "b", RelationType.insp_question),
             self._edge("i1", "i2", RelationType.insp_refines),

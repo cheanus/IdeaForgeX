@@ -47,6 +47,7 @@ def test_ensure_schema_creates_constraints_and_indexes(neo4j_client):
         constraint_names = {c["name"] for c in constraints}
         assert "insp_id_unique" in constraint_names
         assert "q_id_unique" in constraint_names
+        assert "paper_id_unique" in constraint_names
 
         indexes = session.run("SHOW INDEXES").data()
         index_names = {i["name"] for i in indexes}

@@ -89,7 +89,6 @@ def parse_llm_a_candidate(payload: dict[str, Any]) -> LLMACandidate:
                 "粒度": _coerce_granularity(granularity_input),
                 "前提条件": item.get("前提条件", ""),
                 "操作步骤": item.get("操作步骤", ""),
-                "已知实例": "",
             }
         )
 
