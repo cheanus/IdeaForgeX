@@ -9,9 +9,10 @@
 | `bootstrap` | 初始化 Neo4j schema，幂等 |
 | `train` | 将一篇论文提炼为灵感和问题，写入图谱 |
 | `retrieve` | 用自然语言描述搜索图谱，返回相关节点 |
-| `inspect` | 查看某个节点的全部细节（精化链 + 关联边） |
+| `inspect` | 查看某个节点的全部细节（精化链 + 关联边 + 贡献论文） |
 | `random` | 随机探索，打破检索排序的路径依赖 |
 | `relate` | 查找两个节点之间的最短路径 |
+| `delete-node` | 删除节点（含级联清理） |
 | `reset` | 清空图谱（不可逆） |
 
 ## 训练
@@ -74,6 +75,16 @@ uv run python main.py relate insp-abc123 insp-xyz789 --max-len 4
 ```
 
 查找两个节点之间的最短路径，返回中间节点序列和边序列。
+
+## 删除节点
+
+```bash
+# 对论文、灵感、问题统一接口
+uv run python main.py delete-node insp-abc123
+uv run python main.py delete-node paper-1706.03762
+```
+
+级联规则：删除 Paper 时自动清理仅依赖它的实践节点；删除实践节点时自动清理仅依赖它的 Paper。
 
 ## 重置
 
