@@ -21,7 +21,7 @@
 # 初始化图谱
 uv run python main.py bootstrap
 
-# 训练论文（支持 arXiv ID、标题、AMiner ID）
+# 训练论文（支持 arXiv ID、标题）
 uv run python main.py train 1706.03762
 uv run python main.py train "Attention Is All You Need"
 uv run python main.py train ViT

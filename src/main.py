@@ -34,9 +34,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("reset")
 
     train = subparsers.add_parser("train")
-    train.add_argument(
-        "paper", help="论文 ID（arXiv ID / AMiner ID）或标题，支持多级降级解析"
-    )
+    train.add_argument("paper", help="论文 ID（arXiv ID）或标题，支持多级降级解析")
 
     retrieve = subparsers.add_parser("retrieve")
     retrieve.add_argument("query", help="查询文本（论文摘要 / 一句话想法 / 关键词）")
