@@ -6,6 +6,8 @@ import logging
 from datetime import datetime, timezone
 from typing import Annotated
 
+from neo4j.exceptions import ConstraintError
+
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
@@ -77,13 +79,15 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
     def check_duplicate(state: TrainingState) -> dict:
         paper_node_id = _make_paper_id(state["paper_id"])
         with neo4j_client.session() as session:
-            exists = session.run(
-                "MATCH (p:Paper {id: $id}) RETURN p", id=paper_node_id
-            ).single()
-        if exists:
-            _logger.info("论文已训练，跳过: %s", state["paper_id"])
-            return {"already_trained": True}
-        return {"already_trained": False}
+            try:
+                session.run(
+                    "CREATE (p:Paper {id: $id, title: '', year: '', abstract: '', trained_at: ''})",
+                    id=paper_node_id,
+                )
+                return {"already_trained": False}
+            except ConstraintError:
+                _logger.info("论文已训练或正在训练中，跳过: %s", state["paper_id"])
+                return {"already_trained": True}
 
     def route_after_dup(state: TrainingState) -> str:
         return "skip" if state.get("already_trained") else "generate_query"

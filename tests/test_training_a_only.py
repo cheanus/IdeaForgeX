@@ -297,9 +297,6 @@ def test_training_graph_commits_node_updates(monkeypatch, neo4j_client):
 @pytest.mark.neo4j
 def test_training_graph_skips_duplicate(monkeypatch, neo4j_client):
     """验证论文已训练时跳过整个训练流程。"""
-    from src.neo4j.schema import create_paper
-    from src.models import PaperNode
-
     config = Config(
         neo4j_database="neo4j",
         arxiv_short_abstract_threshold=200,
@@ -312,9 +309,9 @@ def test_training_graph_skips_duplicate(monkeypatch, neo4j_client):
     with neo4j_client.driver.session(
         database=neo4j_client.config.neo4j_database
     ) as session:
-        session.execute_write(
-            create_paper,
-            PaperNode(id="paper-1706.03762", title=ATTENTION_TITLE, year="2017"),
+        session.run(
+            "CREATE (p:Paper {id: 'paper-1706.03762', title: $title, year: '2017', abstract: '', trained_at: ''})",
+            title=ATTENTION_TITLE,
         )
 
     call_count = [0]
