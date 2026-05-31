@@ -89,7 +89,13 @@ def build_parser() -> argparse.ArgumentParser:
         "papers", nargs="*", help="论文 ID 列表（arXiv ID 或标题），可从命令行传入"
     )
     batch_train.add_argument(
-        "--file", type=str, default=None, help="文件路径，每行一个论文标识"
+        "--queries", type=str, default=None, help="纯文本查询文件，每行一个论文标识"
+    )
+    batch_train.add_argument(
+        "--jsonl",
+        type=str,
+        default=None,
+        help='JSONL 文件，每行 {"id": "arxiv:1706.03762", "title": "...", "abstract": "..."}',
     )
 
     compact = subparsers.add_parser("compact")
@@ -195,15 +201,38 @@ def main() -> None:
             return
         if args.command == "batch-train":
             papers: list[str] = list(args.papers or [])
-            if args.file:
-                with open(args.file, "r", encoding="utf-8") as f:
+            if args.queries:
+                with open(args.queries, "r", encoding="utf-8") as f:
                     for line in f:
                         stripped = line.strip()
                         if stripped and not stripped.startswith("#"):
                             papers.append(stripped)
-            if not papers:
+            jsonl_records: list[dict] = []
+            if args.jsonl:
+                with open(args.jsonl, "r", encoding="utf-8") as f:
+                    for line in f:
+                        stripped = line.strip()
+                        if not stripped or stripped.startswith("#"):
+                            continue
+                        try:
+                            record = json.loads(stripped)
+                            if not isinstance(record, dict):
+                                raise ValueError(f"非 JSON 对象: {stripped[:80]}")
+                            jsonl_records.append(record)
+                        except json.JSONDecodeError as e:
+                            _logger.warning("跳过非法 JSONL 行: %s", e)
+                            continue
+            if not papers and not jsonl_records:
                 _logger.warning("未提供任何论文标识，退出")
                 return
+            _logger.info(
+                "开始批量训练，查询 %d 篇 + 预加载 %d 篇，并发数 %d",
+                len(papers),
+                len(jsonl_records),
+                config.batch_concurrency,
+            )
+            cmd_batch_train(config, llm_client, neo4j_client, papers, jsonl_records)
+            return
             _logger.info(
                 "开始批量训练，共 %d 篇论文，并发数 %d",
                 len(papers),

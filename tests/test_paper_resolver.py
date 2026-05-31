@@ -7,7 +7,12 @@ import pytest
 from src.config import Config
 from src.models import InspirationNode, QuestionNode
 from src.paper.extractor import ArxivExtractor
-from src.paper.resolver import build_practice_summary, resolve_paper_spec
+from src.paper.resolver import (
+    _strip_prefix,
+    build_practice_summary,
+    paper_from_record,
+    resolve_paper_spec,
+)
 from src.neo4j.schema import create_inspiration, create_question
 from tests.fakes import (
     ATTENTION_ABSTRACT,
@@ -104,6 +109,49 @@ def test_title_search_falls_back_to_arxiv(monkeypatch):
     assert result["title"] == ATTENTION_TITLE
     assert result["paper_id"] == TEST_ARXIV_ID
     assert result["text"] == ATTENTION_ABSTRACT
+
+
+def test_strip_prefix_generic():
+    """_strip_prefix 应支持任意前缀。"""
+    assert _strip_prefix("arxiv:1706.03762") == ("arxiv", "1706.03762")
+    assert _strip_prefix("openalex:W3167826310") == ("openalex", "W3167826310")
+    assert _strip_prefix("my-source:my-id") == ("my-source", "my-id")
+    assert _strip_prefix("no-prefix") == (None, "no-prefix")
+
+
+def test_paper_from_record_colon_id():
+    """paper_from_record 将冒号格式 id 转为内部格式。"""
+    record = {
+        "id": "arxiv:1706.03762",
+        "title": "Test Title",
+        "abstract": "Test abstract text.",
+        "year": "2024",
+    }
+    result = paper_from_record(record)
+    assert result["paper_id"] == "arxiv-1706.03762"
+    assert result["title"] == "Test Title"
+    assert result["text"] == "Test abstract text."
+    assert result["year"] == "2024"
+
+
+def test_paper_from_record_openalex_id():
+    record = {
+        "id": "openalex:W3167826310",
+        "title": "BERT",
+        "abstract": "We introduce BERT...",
+    }
+    result = paper_from_record(record)
+    assert result["paper_id"] == "openalex-W3167826310"
+
+
+def test_paper_from_record_missing_fields():
+    """缺少必填字段应报错。"""
+    with pytest.raises(ValueError, match="缺少必填字段: id"):
+        paper_from_record({"title": "No ID", "abstract": "content"})
+    with pytest.raises(ValueError, match="缺少必填字段: title"):
+        paper_from_record({"id": "arxiv:1234", "abstract": "content"})
+    with pytest.raises(ValueError, match="缺少必填字段: abstract"):
+        paper_from_record({"id": "arxiv:1234", "title": "No Abstract"})
 
 
 @pytest.mark.neo4j

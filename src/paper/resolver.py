@@ -21,7 +21,7 @@ from src.paper.extractor import ArxivExtractor
 
 _ARXIV_ID_PATTERN = re.compile(r"^\d{4}\.\d{4,5}(?:v\d+)?$|^[a-z-]+/\d{7}(?:v\d+)?$")
 _OPENALEX_ID_PATTERN = re.compile(r"^W\d{7,}$", re.IGNORECASE)
-_PREFIX_PATTERN = re.compile(r"^(arxiv|openalex):", re.IGNORECASE)
+_PREFIX_PATTERN = re.compile(r"^([a-zA-Z][\w-]*):(.+)", re.IGNORECASE)
 _MAX_TEXT_LENGTH = 12000
 
 
@@ -37,7 +37,7 @@ def _strip_prefix(spec: str) -> tuple[str | None, str]:
     """解析来源前缀，返回 (来源, 无前缀文本)。无前缀时来源为 None。"""
     m = _PREFIX_PATTERN.match(spec)
     if m:
-        return m.group(1).lower(), spec[m.end() :].strip()
+        return m.group(1).lower(), m.group(2).strip()
     return None, spec
 
 
@@ -223,6 +223,93 @@ def resolve_paper_spec(config: Config, spec: str) -> PaperRecord:
 
 
 def build_practice_summary(client: Neo4jClient, limit: int = 12) -> str:
+    """汇总当前实践库，供 LLM A 判断。"""
+
+    def _records(result: Any) -> list[Any]:
+        if result is None:
+            return []
+        return list(result)
+
+    with client.session() as session:
+
+        def _extract_node(record: Any) -> dict[str, Any]:
+            if hasattr(record, "data"):
+                data = record.data()
+                if isinstance(data, dict):
+                    node = data.get("n", data)
+                    if isinstance(node, dict):
+                        return node
+                    if hasattr(node, "data"):
+                        inner = node.data()
+                        return inner if isinstance(inner, dict) else {}
+            if isinstance(record, dict):
+                node = record.get("n", record)
+                if isinstance(node, dict):
+                    return node
+                if hasattr(node, "data"):
+                    inner = node.data()
+                    return inner if isinstance(inner, dict) else {}
+            return {}
+
+        inspiration_result = session.run(
+            """
+            MATCH (n:Inspiration)
+            RETURN n
+            LIMIT $limit
+            """,
+            limit=limit,
+        )
+        question_result = session.run(
+            """
+            MATCH (n:Question)
+            RETURN n
+            LIMIT $limit
+            """,
+            limit=limit,
+        )
+
+        inspirations = [
+            f"{node.get('id', '')}: {node.get('核心描述') or node.get('core', '')} (粒度 {node.get('粒度', node.get('grain', 0))})"
+            for record_ in _records(inspiration_result)
+            for node in [_extract_node(record_)]
+        ]
+        questions = [
+            f"{node.get('id', '')}: {node.get('核心描述') or node.get('core', '')} ({node.get('问题类型') or node.get('qtype', '理论缺口')})"
+            for record_ in _records(question_result)
+            for node in [_extract_node(record_)]
+        ]
+
+    sections: list[str] = []
+    if inspirations:
+        sections.append("Inspiration:\n" + "\n".join(inspirations))
+    if questions:
+        sections.append("Question:\n" + "\n".join(questions))
+    return "\n\n".join(sections) or "暂无实践库节点"
+
+
+def paper_from_record(record: dict[str, Any]) -> PaperRecord:
+    """从预加载的 JSONL 行构建 PaperRecord（跳过 API 解析）。
+
+    将冒号分隔的 id（如 arxiv:1706.03762）转为内部格式（arxiv-1706.03762）。
+    """
+    raw_id = record.get("id", "")
+    if not raw_id:
+        raise ValueError("JSONL 行缺少必填字段: id")
+    source, body = _strip_prefix(raw_id)
+    paper_id = f"{source}-{body}" if source else raw_id
+    title = record.get("title", "")
+    abstract = record.get("abstract", "")
+    if not title:
+        raise ValueError(f"JSONL 行缺少必填字段: title (id={raw_id})")
+    if not abstract:
+        raise ValueError(f"JSONL 行缺少必填字段: abstract (id={raw_id})")
+    return {
+        "paper_id": paper_id,
+        "title": title,
+        "text": abstract,
+        "year": str(record.get("year", "")),
+        "paper": record,
+    }
     """汇总当前实践库，供 LLM A 判断。"""
 
     def _records(result: Any) -> list[Any]:

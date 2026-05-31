@@ -295,7 +295,7 @@ def _train_one_paper(
     neo4j_client: Neo4jClient,
     paper: str,
 ) -> dict[str, Any]:
-    """训练单篇论文，返回 {"status": "ok"} 或抛异常。"""
+    """训练单篇论文（字符串查询），返回 {"status": "ok"} 或抛异常。"""
     from src.agent.training import build_training_graph, run_training
 
     _logger.info("开始训练论文: %s", paper)
@@ -308,73 +308,108 @@ def _train_one_paper(
     return {"status": "ok"}
 
 
+def _train_one_record(
+    config: Config,
+    llm_client: ChatClient,
+    neo4j_client: Neo4jClient,
+    record: dict[str, Any],
+) -> dict[str, Any]:
+    """训练单篇论文（预加载 JSONL 记录），跳过 API 解析。"""
+    from src.agent.training import build_training_graph, run_training_with_record
+    from src.paper.resolver import paper_from_record
+
+    pr = paper_from_record(record)
+    paper_id = pr["paper_id"]
+    _logger.info("开始训练论文（预加载）: %s", paper_id)
+    graph = build_training_graph(config, llm_client, neo4j_client)
+    result = run_training_with_record(graph, paper_id, record)
+    if result.get("already_trained"):
+        _logger.info("论文已存在于图库，跳过: %s", paper_id)
+    else:
+        _logger.info("论文训练完成: %s", paper_id)
+    return {"status": "ok"}
+
+
 def cmd_batch_train(
     config: Config,
     llm_client: ChatClient,
     neo4j_client: Neo4jClient,
     papers: list[str],
+    jsonl_records: list[dict[str, Any]] | None = None,
     progress_callback=None,
 ) -> dict[str, Any]:
     """并行训练多篇论文，分批 compact。
 
     Args:
-        papers: 论文标识列表
+        papers: 论文标识列表（走 resolve_paper_spec 解析）
+        jsonl_records: JSONL 预加载记录列表（跳过 API 解析）
         progress_callback: 可选回调 (completed, total, paper, status)
-
-    Returns:
-        {"总论文数": N, "成功数": M, "失败数": F, "成功列表": [...], "失败列表": [...]}
     """
     from src.neo4j.compact import compact_all
 
-    total = len(papers)
+    total = len(papers) + (len(jsonl_records) if jsonl_records else 0)
     succeeded: list[str] = []
     failed: list[dict[str, str]] = []
     lock = threading.Lock()
 
     interval = config.compact_interval
-    batch_size = interval if interval > 0 else total
+
+    # 构建统一的任务列表: (paper_id_or_record, is_record)
+    tasks: list[tuple[str, dict[str, Any] | None]] = []
+    tasks.extend((p, None) for p in papers)
+    if jsonl_records:
+        for rec in jsonl_records:
+            tasks.append((rec.get("id", ""), rec))
+
+    if interval <= 0:
+        interval = total
+    batch_size = interval
 
     for i in range(0, total, batch_size):
-        batch = papers[i : i + batch_size]
+        batch = tasks[i : i + batch_size]
         _logger.info("开始训练第 %d-%d 批 (共 %d 篇)", i + 1, i + len(batch), total)
 
         with concurrent.futures.ThreadPoolExecutor(
             max_workers=config.batch_concurrency
         ) as executor:
             future_map = {}
-            for paper in batch:
-                future = executor.submit(
-                    _train_one_paper, config, llm_client, neo4j_client, paper
-                )
-                future_map[future] = paper
+            for item in batch:
+                key, rec = item
+                if rec is not None:
+                    future = executor.submit(
+                        _train_one_record, config, llm_client, neo4j_client, rec
+                    )
+                else:
+                    future = executor.submit(
+                        _train_one_paper, config, llm_client, neo4j_client, key
+                    )
+                future_map[future] = key
 
             for future in concurrent.futures.as_completed(future_map):
-                paper = future_map[future]
+                key = future_map[future]
                 try:
                     future.result()
                     with lock:
-                        succeeded.append(paper)
+                        succeeded.append(key)
                     if progress_callback:
                         progress_callback(
-                            len(succeeded) + len(failed), total, paper, "ok"
+                            len(succeeded) + len(failed), total, key, "ok"
                         )
                 except Exception as e:
-                    _logger.error("论文 %s 训练失败: %s", paper, e)
+                    _logger.error("论文 %s 训练失败: %s", key, e)
                     with lock:
-                        failed.append({"论文": paper, "错误": str(e)})
+                        failed.append({"论文": key, "错误": str(e)})
                     if progress_callback:
                         progress_callback(
-                            len(succeeded) + len(failed), total, paper, "failed"
+                            len(succeeded) + len(failed), total, key, "failed"
                         )
 
-        # 批次完成，触发 compact
         completed_so_far = i + len(batch)
-        if interval > 0 and completed_so_far < total:
+        if completed_so_far < total:
             _logger.info("批次完成，开始压缩知识图谱 …")
             compact_report = compact_all(neo4j_client, config)
             print(json.dumps(compact_report, ensure_ascii=False, indent=2))
 
-    # 最终 compact
     _logger.info("全部训练完成，执行最终压缩 …")
     final_report = compact_all(neo4j_client, config)
     print(json.dumps(final_report, ensure_ascii=False, indent=2))

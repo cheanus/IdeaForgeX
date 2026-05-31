@@ -32,7 +32,11 @@ from src.neo4j.schema import (
     create_paper,
     create_paper_contributes_edge,
 )
-from src.paper.resolver import build_practice_summary, resolve_paper_spec
+from src.paper.resolver import (
+    build_practice_summary,
+    paper_from_record,
+    resolve_paper_spec,
+)
 
 _logger = logging.getLogger("ideaforgex")
 
@@ -42,6 +46,9 @@ class TrainingState(TypedDict, total=False):
     paper_title: str
     paper_year: str
     paper_text: str
+    paper_record: (
+        dict | None
+    )  # 预加载的 PaperRecord（来自 JSONL），跳过 resolve_paper_spec
     query_text: str
     retrieved_nodes: list[dict]
     can_infer: bool
@@ -62,18 +69,31 @@ def _make_paper_id(raw_id: str) -> str:
 
 def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4jClient):
     def load_paper(state: TrainingState) -> dict:
+        record = state.get("paper_record")
+        if record:
+            _logger.info(
+                "使用预加载论文数据: %s",
+                record.get("title", record.get("paper_id", "")),
+            )
+            pr = paper_from_record(record)
+            return {
+                "paper_id": pr["paper_id"],
+                "paper_title": pr["title"],
+                "paper_year": pr["year"],
+                "paper_text": pr["text"],
+            }
         paper_text = state.get("paper_text", "")
         if paper_text:
             return {}
         paper_id = state["paper_id"]
         _logger.info("正在获取论文 …")
-        record = resolve_paper_spec(config, paper_id)
-        _logger.info("论文获取完成: %s", record["title"])
+        resolved = resolve_paper_spec(config, paper_id)
+        _logger.info("论文获取完成: %s", resolved["title"])
         return {
-            "paper_id": record["paper_id"],
-            "paper_title": record["title"],
-            "paper_year": record.get("year", ""),
-            "paper_text": record["text"],
+            "paper_id": resolved["paper_id"],
+            "paper_title": resolved["title"],
+            "paper_year": resolved.get("year", ""),
+            "paper_text": resolved["text"],
         }
 
     def check_duplicate(state: TrainingState) -> dict:
@@ -279,3 +299,9 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
 def run_training(graph, paper_id: str) -> dict:
     config = {"configurable": {"thread_id": paper_id}}
     return graph.invoke({"paper_id": paper_id}, config)
+
+
+def run_training_with_record(graph, paper_id: str, record: dict) -> dict:
+    """使用预加载的论文记录训练（跳过 resolve_paper_spec）。"""
+    config = {"configurable": {"thread_id": paper_id}}
+    return graph.invoke({"paper_id": paper_id, "paper_record": record}, config)
