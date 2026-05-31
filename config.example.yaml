@@ -16,7 +16,7 @@ embedding_dim: 2560
 # ── 论文源 ──
 openalex_api_key: ""
 arxiv_api_url: "https://export.arxiv.org/api/query"
-arxiv_short_abstract_threshold: 200  # 摘要低于此字符数时触发全文 PDF 降级
+short_abstract_threshold: 200  # 摘要低于此字符数时触发全文 PDF 降级（arXiv / OpenAlex 均适用）
 
 # ── Neo4j ──
 neo4j_uri: "bolt://localhost:7688"

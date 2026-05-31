@@ -109,7 +109,7 @@ All parameters live in `config.yaml` (see `config.example.yaml` for defaults). E
 |---|---|
 | LLM | `llm_base_url`, `llm_api_key`, `llm_model_name` |
 | Embedding | `embedding_base_url`, `embedding_api_key`, `embedding_model_name`, `embedding_dim` |
-| Paper | `openalex_api_key`, `arxiv_short_abstract_threshold` |
+| Paper | `openalex_api_key`, `short_abstract_threshold` |
 | Neo4j | `neo4j_uri`, `neo4j_user`, `neo4j_password`, `neo4j_database` |
 | Retrieval | `k_hits`, `max_neighbors`, `max_depth`, `score_decay`, `final_k` |
 | Logging | `log_level` — `DEBUG` / `INFO` / `WARNING` / `ERROR` (overridden by `LOG_LEVEL` env var) |

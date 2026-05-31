@@ -51,6 +51,9 @@ class FakeOpenAlexClient:
             "publication_year": 2017,
         }
 
+    def download_pdf(self, work_id: str) -> str | None:
+        return None
+
 
 class FakeArxivExtractor:
     """返回固定全文的 arXiv 提取器。"""

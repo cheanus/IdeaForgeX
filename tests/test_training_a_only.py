@@ -85,7 +85,7 @@ def test_training_graph_routes_can_infer_to_commit_candidates(
     """验证 can_infer=True（可直接推断）时创建 Paper 节点但不创建实践节点。"""
     config = Config(
         neo4j_database="neo4j",
-        arxiv_short_abstract_threshold=200,
+        short_abstract_threshold=200,
     )
 
     monkeypatch.setattr("src.paper.resolver.OpenAlexClient", FakeOpenAlexClient)
@@ -138,7 +138,7 @@ def test_training_graph_commits_candidates_when_cannot_infer(monkeypatch, neo4j_
     """验证 can_infer=False（需要提取）时走 commit_candidates 路径并写入节点和关系。"""
     config = Config(
         neo4j_database="neo4j",
-        arxiv_short_abstract_threshold=200,
+        short_abstract_threshold=200,
     )
     dim = config.embedding_dim
 
@@ -231,7 +231,7 @@ def test_training_graph_commits_node_updates(monkeypatch, neo4j_client):
 
     config = Config(
         neo4j_database="neo4j",
-        arxiv_short_abstract_threshold=200,
+        short_abstract_threshold=200,
     )
     dim = config.embedding_dim
 
@@ -299,7 +299,7 @@ def test_training_graph_skips_duplicate(monkeypatch, neo4j_client):
     """验证论文已训练时跳过整个训练流程。"""
     config = Config(
         neo4j_database="neo4j",
-        arxiv_short_abstract_threshold=200,
+        short_abstract_threshold=200,
     )
 
     monkeypatch.setattr("src.paper.resolver.OpenAlexClient", FakeOpenAlexClient)

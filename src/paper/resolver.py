@@ -42,7 +42,7 @@ def _resolve_text(
     config: Config, extractor: ArxivExtractor, arxiv_id: str, abstract: str
 ) -> str:
     """必要时降级到全文 PDF 获取更长文本。"""
-    if len(abstract) < config.arxiv_short_abstract_threshold:
+    if len(abstract) < config.short_abstract_threshold:
         try:
             full_text = extractor.fetch_full_text(arxiv_id)
             if full_text:
@@ -80,10 +80,16 @@ def _try_openalex_search(config: Config, query: str) -> PaperRecord | None:
     title = best.get("title", query)
     abstract = _reconstruct_abstract(best.get("abstract_inverted_index"))
     year = str(best.get("publication_year", ""))
+    text = abstract
+    if len(abstract) < config.short_abstract_threshold and short_id:
+        _logger.info("OpenAlex 摘要过短，尝试下载 PDF …")
+        full_text = client.download_pdf(short_id)
+        if full_text:
+            text = full_text
     return {
         "paper_id": f"openalex-{short_id}" if short_id else query,
         "title": title,
-        "text": abstract,
+        "text": text,
         "year": year,
         "paper": best,
     }

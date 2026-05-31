@@ -108,7 +108,7 @@ uv run pytest -v
 |---|---|
 | LLM | `llm_base_url`、`llm_api_key`、`llm_model_name` |
 | Embedding | `embedding_base_url`、`embedding_api_key`、`embedding_model_name`、`embedding_dim` |
-| 论文 | `openalex_api_key`、`arxiv_short_abstract_threshold` |
+| 论文 | `openalex_api_key`、`short_abstract_threshold` |
 | Neo4j | `neo4j_uri`、`neo4j_user`、`neo4j_password`、`neo4j_database` |
 | 检索 | `k_hits`、`max_neighbors`、`max_depth`、`score_decay`、`final_k` |
 | 日志 | `log_level` — `DEBUG` / `INFO` / `WARNING` / `ERROR`（可用 `LOG_LEVEL` 环境变量覆盖） |

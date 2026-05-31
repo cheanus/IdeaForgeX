@@ -96,3 +96,39 @@ class OpenAlexClient:
         work_id = _extract_work_id(paper_id)
         response = self._request("GET", f"/works/{work_id}")
         return response.json()
+
+    def download_pdf(self, work_id: str) -> str | None:
+        """下载 OpenAlex 论文 PDF 全文，返回文本或 None。
+
+        work_id 支持 OpenAlex work ID 或完整 URL。
+        使用 content.openalex.org 的 PDF 端点（$0.01/次）。
+        """
+        short_id = _extract_work_id(work_id)
+        try:
+            response = self._request(
+                "GET",
+                f"/works/{short_id}",
+                params={"api_key": self.config.openalex_api_key},
+            )
+            # OpenAlex PDF is at content.openalex.org/works/{id}.pdf
+            import io
+            import pymupdf as fitz
+
+            pdf_response = httpx.get(
+                f"https://content.openalex.org/works/{short_id}.pdf",
+                params={"api_key": self.config.openalex_api_key},
+                timeout=60.0,
+                follow_redirects=True,
+            )
+            pdf_response.raise_for_status()
+            doc = fitz.open(stream=pdf_response.content, filetype="pdf")
+            text_parts: list[str] = []
+            for page in doc:
+                raw_text = page.get_text()  # type: ignore[union-attr]
+                if isinstance(raw_text, str) and raw_text:
+                    text_parts.append(raw_text)
+            doc.close()
+            return "\n".join(text_parts) if text_parts else None
+        except Exception as exc:
+            _logger.warning("OpenAlex PDF 下载失败: %s", exc)
+            return None

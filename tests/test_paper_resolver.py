@@ -21,7 +21,7 @@ from tests.fakes import (
 
 def test_resolve_paper_spec_resolves_arxiv_id_directly(monkeypatch):
     """arXiv ID 格式应直接走 arXiv 路径，不经过 OpenAlex。"""
-    config = Config(arxiv_short_abstract_threshold=200)
+    config = Config(short_abstract_threshold=200)
     monkeypatch.setattr("src.paper.resolver.ArxivExtractor", FakeArxivExtractor)
 
     result = resolve_paper_spec(config, "1706.03762")
@@ -33,7 +33,7 @@ def test_resolve_paper_spec_resolves_arxiv_id_directly(monkeypatch):
 
 def test_arxiv_title_search_succeeds_skips_openalex(monkeypatch):
     """arXiv 标题搜索优先，命中后不再调用 OpenAlex。"""
-    config = Config(arxiv_short_abstract_threshold=200)
+    config = Config(short_abstract_threshold=200)
 
     call_log: list[str] = []
 
@@ -60,7 +60,7 @@ def test_arxiv_title_search_succeeds_skips_openalex(monkeypatch):
 
 def test_resolve_paper_spec_falls_back_to_openalex_when_arxiv_fails(monkeypatch):
     """arXiv 标题搜索无结果时降级到 OpenAlex 语义搜索。"""
-    config = Config(arxiv_short_abstract_threshold=200)
+    config = Config(short_abstract_threshold=200)
     monkeypatch.setattr("src.paper.resolver._try_arxiv_fallback", lambda c, t: None)
     monkeypatch.setattr("src.paper.resolver.OpenAlexClient", FakeOpenAlexClient)
 
