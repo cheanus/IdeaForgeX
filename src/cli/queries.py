@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import concurrent.futures
+import json
 import logging
+import threading
 import time
 from typing import Any
 
@@ -271,3 +274,117 @@ def cmd_delete_node(
     node_id: str,
 ) -> dict[str, Any]:
     return _delete_node_cascade(neo4j_client, node_id)
+
+
+def cmd_compact(
+    config: Config,
+    neo4j_client: Neo4jClient,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """执行全图压缩，dry_run 为 True 时仅报告不执行。"""
+    from src.neo4j.compact import compact_all, compact_dry_run
+
+    if dry_run:
+        return compact_dry_run(neo4j_client, config)
+    return compact_all(neo4j_client, config)
+
+
+def _train_one_paper(
+    config: Config,
+    llm_client: ChatClient,
+    neo4j_client: Neo4jClient,
+    paper: str,
+) -> dict[str, Any]:
+    """训练单篇论文，返回 {"status": "ok"} 或抛异常。"""
+    from src.agent.training import build_training_graph, run_training
+
+    _logger.info("开始训练论文: %s", paper)
+    graph = build_training_graph(config, llm_client, neo4j_client)
+    result = run_training(graph, paper)
+    if result.get("already_trained"):
+        _logger.info("论文已存在于图库，跳过: %s", paper)
+    else:
+        _logger.info("论文训练完成: %s", paper)
+    return {"status": "ok"}
+
+
+def cmd_batch_train(
+    config: Config,
+    llm_client: ChatClient,
+    neo4j_client: Neo4jClient,
+    papers: list[str],
+    progress_callback=None,
+) -> dict[str, Any]:
+    """并行训练多篇论文，分批 compact。
+
+    Args:
+        papers: 论文标识列表
+        progress_callback: 可选回调 (completed, total, paper, status)
+
+    Returns:
+        {"总论文数": N, "成功数": M, "失败数": F, "成功列表": [...], "失败列表": [...]}
+    """
+    from src.neo4j.compact import compact_all
+
+    total = len(papers)
+    succeeded: list[str] = []
+    failed: list[dict[str, str]] = []
+    lock = threading.Lock()
+
+    interval = config.compact_interval
+    batch_size = interval if interval > 0 else total
+
+    for i in range(0, total, batch_size):
+        batch = papers[i : i + batch_size]
+        _logger.info("开始训练第 %d-%d 批 (共 %d 篇)", i + 1, i + len(batch), total)
+
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=config.batch_concurrency
+        ) as executor:
+            future_map = {}
+            for paper in batch:
+                future = executor.submit(
+                    _train_one_paper, config, llm_client, neo4j_client, paper
+                )
+                future_map[future] = paper
+
+            for future in concurrent.futures.as_completed(future_map):
+                paper = future_map[future]
+                try:
+                    future.result()
+                    with lock:
+                        succeeded.append(paper)
+                    if progress_callback:
+                        progress_callback(
+                            len(succeeded) + len(failed), total, paper, "ok"
+                        )
+                except Exception as e:
+                    _logger.error("论文 %s 训练失败: %s", paper, e)
+                    with lock:
+                        failed.append({"论文": paper, "错误": str(e)})
+                    if progress_callback:
+                        progress_callback(
+                            len(succeeded) + len(failed), total, paper, "failed"
+                        )
+
+        # 批次完成，触发 compact
+        completed_so_far = i + len(batch)
+        if interval > 0 and completed_so_far < total:
+            _logger.info("批次完成，开始压缩知识图谱 …")
+            compact_report = compact_all(neo4j_client, config)
+            print(json.dumps(compact_report, ensure_ascii=False, indent=2))
+
+    # 最终 compact
+    _logger.info("全部训练完成，执行最终压缩 …")
+    final_report = compact_all(neo4j_client, config)
+    print(json.dumps(final_report, ensure_ascii=False, indent=2))
+
+    result = {
+        "总论文数": total,
+        "成功数": len(succeeded),
+        "失败数": len(failed),
+        "成功列表": succeeded,
+        "失败列表": failed,
+    }
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return result
