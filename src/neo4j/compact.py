@@ -325,3 +325,128 @@ def compact_inspirations(
             report["总量"] += count
 
     return report
+
+
+def compact_questions(
+    client: Neo4jClient, threshold: float, topk: int
+) -> dict[str, int]:
+    """合并语义相近的 Question 节点（无链约束）。"""
+    with client.session() as session:
+        result = session.run("MATCH (n:Question) RETURN n.id AS id, n.向量 AS vector")
+        nodes = [{"id": r["id"], "vector": r["vector"]} for r in result]
+
+    if not nodes:
+        return {"总量": 0}
+
+    pairs = _find_similar_pairs(client, nodes, "idx_q_vector", threshold, topk)
+    if not pairs:
+        return {"总量": 0}
+
+    all_ids = {n["id"] for n in nodes}
+    uf = UnionFind(all_ids)
+    for a_id, b_id, _ in pairs:
+        uf.union(a_id, b_id)
+
+    groups = uf.get_groups()
+    total_merged = 0
+    for member_set in groups:
+        survivor = _pick_survivor(client, member_set)
+        victims = [nid for nid in member_set if nid != survivor]
+        _merge_node_group(client, survivor, victims)
+        total_merged += len(victims)
+
+    return {"总量": total_merged}
+
+
+def _deduplicate_edges(client: Neo4jClient) -> int:
+    """清除合并后产生的重复边（同节点对、同类型）。"""
+    with client.driver.session(database=client.config.neo4j_database) as session:
+        result = session.run(
+            """
+            MATCH (a)-[r]->(b)
+            MATCH (a)-[r2]->(b)
+            WHERE type(r) = type(r2) AND elementId(r) < elementId(r2)
+            WITH DISTINCT r2
+            DELETE r2
+            RETURN count(r2) AS total_removed
+            """
+        )
+        record = result.single()
+        return record["total_removed"] or 0 if record else 0
+
+
+def compact_all(client: Neo4jClient, config: Config) -> dict[str, Any]:
+    """完整压缩入口：Inspiration → Question → 边去重。"""
+    _logger.info("开始压缩 Inspiration 节点 …")
+    insp_report = compact_inspirations(
+        client, config.compact_threshold, config.compact_topk
+    )
+    _logger.info(
+        "Inspiration 压缩完成，共合并 %d 个节点（粒1=%d, 粒2=%d, 粒3=%d）",
+        insp_report["总量"],
+        insp_report.get("粒1", 0),
+        insp_report.get("粒2", 0),
+        insp_report.get("粒3", 0),
+    )
+
+    _logger.info("开始压缩 Question 节点 …")
+    q_report = compact_questions(client, config.compact_threshold, config.compact_topk)
+    _logger.info("Question 压缩完成，共合并 %d 个节点", q_report["总量"])
+
+    _logger.info("开始去重重复边 …")
+    removed_edges = _deduplicate_edges(client)
+    _logger.info("边去重完成，共删除 %d 条重复边", removed_edges)
+
+    return {
+        "merged_inspirations": insp_report,
+        "merged_questions": q_report,
+        "removed_duplicate_edges": removed_edges,
+        "dry_run": False,
+    }
+
+
+def compact_dry_run(client: Neo4jClient, config: Config) -> dict[str, Any]:
+    """不实际执行，仅报告将会合并的节点数量和组数。"""
+    threshold = config.compact_threshold
+    topk = config.compact_topk
+    insp_groups = 0
+    insp_merged = 0
+    q_groups = 0
+    q_merged = 0
+
+    for granularity in [1, 2, 3]:
+        nodes = _fetch_inspiration_nodes(client, granularity)
+        if not nodes:
+            continue
+        pairs = _find_similar_pairs(
+            client, nodes, "idx_insp_vector", threshold, topk, granularity=granularity
+        )
+        if not pairs:
+            continue
+        all_ids = {n["id"] for n in nodes}
+        uf = UnionFind(all_ids)
+        for a_id, b_id, _ in pairs:
+            uf.union(a_id, b_id)
+        groups = uf.get_groups()
+        insp_groups += len(groups)
+        insp_merged += sum(len(g) - 1 for g in groups)
+
+    with client.session() as session:
+        result = session.run("MATCH (n:Question) RETURN n.id AS id, n.向量 AS vector")
+        nodes = [{"id": r["id"], "vector": r["vector"]} for r in result]
+    if nodes:
+        pairs = _find_similar_pairs(client, nodes, "idx_q_vector", threshold, topk)
+        if pairs:
+            all_ids = {n["id"] for n in nodes}
+            uf = UnionFind(all_ids)
+            for a_id, b_id, _ in pairs:
+                uf.union(a_id, b_id)
+            groups = uf.get_groups()
+            q_groups = len(groups)
+            q_merged = sum(len(g) - 1 for g in groups)
+
+    return {
+        "merged_inspirations": {"总量": insp_merged, "组数": insp_groups},
+        "merged_questions": {"总量": q_merged, "组数": q_groups},
+        "dry_run": True,
+    }
