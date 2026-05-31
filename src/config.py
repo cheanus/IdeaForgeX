@@ -48,6 +48,10 @@ class Config(BaseSettings):
     max_depth: int = Field(default=1)
     score_decay: float = Field(default=0.5)
     final_k: int = Field(default=15)
+    batch_concurrency: int = Field(default=4)
+    compact_interval: int = Field(default=10)
+    compact_threshold: float = Field(default=0.95)
+    compact_topk: int = Field(default=5)
     arxiv_short_abstract_threshold: int = Field(default=200)
     log_level: str = Field(default="INFO")
 

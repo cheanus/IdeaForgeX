@@ -34,5 +34,11 @@ max_depth: 1          # BFS 扩展层数，1=仅 1-hop，2=1-hop + 2-hop。越�
 score_decay: 0.5      # 每跳衰减因子，邻居得分 = 源节点分 × score_decay。越低图扩展节点越难进入最终结果
 final_k: 15           # 最终返回的候选节点数
 
+# ── 并行训练与压缩 ──
+batch_concurrency: 4       # 并行训练最大线程数
+compact_interval: 10       # 每 N 篇完成触发 inline compact
+compact_threshold: 0.95    # 余弦相似度合并阈值
+compact_topk: 5            # HNSW 近邻搜索 k
+
 # ── 日志 ──
 log_level: "INFO"  # DEBUG | INFO | WARNING | ERROR
