@@ -31,7 +31,7 @@ LLM 返回 JSON → `models.py` 的 Pydantic 验证 → 写入 Neo4j。验证失
 
 - LLM JSON 解析失败：重试，超过 `max_retries` 终止。
 - Neo4j 连接失败：抛异常退出，不静默。
-- AMiner API 失败：重试 3 次，仍失败跳过该论文。
+- OpenAlex API 失败：重试 3 次（指数退避），仍失败跳过该论文。
 - arXiv 全文获取失败：降级为仅用摘要。
 - 向量索引不存在：`schema.py` 幂等创建。
 
@@ -77,7 +77,7 @@ uv run pytest -v
 - `src/agent/CONVENTIONS.md` — LangGraph StateGraph 编写规范
 - `src/neo4j/CONVENTIONS.md` — Neo4j 操作与事务约定
 - `src/llm/CONVENTIONS.md` — LLM 调用与 prompt 管理
-- `src/paper/CONVENTIONS.md` — AMiner + arXiv 论文 API 约定
+- `src/paper/CONVENTIONS.md` — OpenAlex + arXiv 论文 API 约定
 - `src/cli/CONVENTIONS.md` — CLI 查询命令约定
 
 `docs/superpowers/specs/` 包含设计与架构文档，不包含实现细节。实现细节在各子模块的 `CONVENTIONS.md` 中定义。

@@ -21,7 +21,7 @@ Most paper-to-idea pipelines stop at summaries or require manual curation. IdeaF
 - 🕸️ **Neo4j knowledge graph** — dual node types (`Inspiration` + `Question`), four edge types, multi-granularity refinement chains
 - 🔌 **Agent-friendly CLI** — four query commands (`retrieve`, `inspect`, `random`, `relate`) return structured JSON for external agents
 - 🐳 **Local Docker setup** — test and personal Neo4j instances via `docker compose`
-- 📄 **AMiner + arXiv** — tiered paper resolution with automatic fallback
+- 📄 **OpenAlex + arXiv** — tiered paper resolution with automatic fallback
 - ✅ **Full test suite** — `uv run pytest -v` covers training, retrieval, and CLI output
 
 ## Project Structure
@@ -30,7 +30,7 @@ Most paper-to-idea pipelines stop at summaries or require manual curation. IdeaF
 |---|---|
 | `src/agent/` | LangGraph training workflow |
 | `src/llm/` | Prompt templates and chat/embedding client |
-| `src/paper/` | AMiner discovery, arXiv PDF extraction, paper resolver |
+| `src/paper/` | OpenAlex discovery, arXiv PDF extraction, paper resolver |
 | `src/neo4j/` | Schema bootstrap, retrieval traversal, graph maintenance |
 | `src/cli/` | CLI query commands (`retrieve` / `inspect` / `random` / `relate`) |
 | `tests/` | Regression coverage for training, CLI, config, and LLM client |
@@ -62,7 +62,7 @@ cp config.example.yaml config.yaml
 > Edit `config.yaml` and fill in your API keys:
 > - `llm_api_key` — your LLM provider (DeepSeek, OpenAI, etc.)
 > - `embedding_api_key` — your embedding provider
-> - `aminer_api_key` — [AMiner](https://www.aminer.cn/) API key for paper discovery
+> - `openalex_api_key` — [OpenAlex](https://openalex.org/) API key for paper discovery
 > - `neo4j_password` — Neo4j database password
 
 ```bash
@@ -109,7 +109,7 @@ All parameters live in `config.yaml` (see `config.example.yaml` for defaults). E
 |---|---|
 | LLM | `llm_base_url`, `llm_api_key`, `llm_model_name` |
 | Embedding | `embedding_base_url`, `embedding_api_key`, `embedding_model_name`, `embedding_dim` |
-| Paper | `aminer_api_key`, `arxiv_short_abstract_threshold` |
+| Paper | `openalex_api_key`, `arxiv_short_abstract_threshold` |
 | Neo4j | `neo4j_uri`, `neo4j_user`, `neo4j_password`, `neo4j_database` |
 | Retrieval | `k_hits`, `max_neighbors`, `max_depth`, `score_decay`, `final_k` |
 | Logging | `log_level` — `DEBUG` / `INFO` / `WARNING` / `ERROR` (overridden by `LOG_LEVEL` env var) |

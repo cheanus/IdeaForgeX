@@ -21,7 +21,7 @@
 - 🕸️ **Neo4j 知识图谱** — 双节点类型（`Inspiration` + `Question`），四种边，多粒度精化链
 - 🔌 **Agent 友好 CLI** — 四个查询命令（`retrieve`、`inspect`、`random`、`relate`），返回结构化 JSON 供外部 agent 消费
 - 🐳 **本地 Docker 支持** — 通过 `docker compose` 运行测试库和个人库 Neo4j 实例
-- 📄 **AMiner + arXiv** — 分层论文解析，自动回退
+- 📄 **OpenAlex + arXiv** — 分层论文解析，自动回退
 - ✅ **完整回归测试** — `uv run pytest -v` 覆盖训练、检索、CLI 输出
 
 ## 项目结构
@@ -30,7 +30,7 @@
 |---|---|
 | `src/agent/` | LangGraph 训练工作流 |
 | `src/llm/` | prompt 模板与 chat/embedding 客户端 |
-| `src/paper/` | AMiner 发现、arXiv PDF 提取、论文解析 |
+| `src/paper/` | OpenAlex 发现、arXiv PDF 提取、论文解析 |
 | `src/neo4j/` | schema 初始化、检索遍历、图维护 |
 | `src/cli/` | CLI 查询命令（`retrieve` / `inspect` / `random` / `relate`） |
 | `tests/` | 训练、CLI、配置、LLM 客户端的回归覆盖 |
@@ -62,7 +62,7 @@ cp config.example.yaml config.yaml
 > 编辑 `config.yaml`，填入 API 密钥：
 > - `llm_api_key` — 你的 LLM 提供商（DeepSeek、OpenAI 等）
 > - `embedding_api_key` — 你的 Embedding 提供商
-> - `aminer_api_key` — [AMiner](https://www.aminer.cn/) API 密钥，用于论文发现
+> - `openalex_api_key` — [OpenAlex](https://openalex.org/) API 密钥，用于论文发现
 > - `neo4j_password` — Neo4j 数据库密码
 
 ```bash
@@ -108,7 +108,7 @@ uv run pytest -v
 |---|---|
 | LLM | `llm_base_url`、`llm_api_key`、`llm_model_name` |
 | Embedding | `embedding_base_url`、`embedding_api_key`、`embedding_model_name`、`embedding_dim` |
-| 论文 | `aminer_api_key`、`arxiv_short_abstract_threshold` |
+| 论文 | `openalex_api_key`、`arxiv_short_abstract_threshold` |
 | Neo4j | `neo4j_uri`、`neo4j_user`、`neo4j_password`、`neo4j_database` |
 | 检索 | `k_hits`、`max_neighbors`、`max_depth`、`score_decay`、`final_k` |
 | 日志 | `log_level` — `DEBUG` / `INFO` / `WARNING` / `ERROR`（可用 `LOG_LEVEL` 环境变量覆盖） |
