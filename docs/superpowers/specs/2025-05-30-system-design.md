@@ -110,6 +110,19 @@ load_paper → check_duplicate → {skip | generate_query → retrieve
 
 并发安全：`check_duplicate` 通过 `CREATE Paper` + uniqueness constraint 实现原子预留，两个并发训练同一论文时第二个触发 `ConstraintError` 直接跳过。节点 ID 通过 `paper_id` 前缀天然隔离。
 
+### 6.1 并行训练与图压缩
+
+多个进程并发训练不同论文时，可能因并发窗口产生语义相近的重复节点（论文甲创建节点 A，论文乙在 A 提交前检索不到 A，独立创建相似节点 B）。
+
+`batch-train` 命令用 `ThreadPoolExecutor` 多线程并行训练，按 `compact_interval` 分批，每批完成后触发 inline compact。`compact` 命令也可独立运行。压缩算法：
+
+- Inspiration 自顶向下（粒 1→2→3）合并，链约束确保细化链树结构不被破坏
+- Question 纯相似度合并
+- HNSW 向量索引做近似近邻发现
+- 并查集将相似对聚合成合并组
+
+详见 `docs/superpowers/specs/2026-05-31-batch-training-compact-design.md`。
+
 ## 7. 推理流程
 
 推理不在 IdeaForgeX 内部完成。外部 agent 通过 CLI 命令编排创新点生成：

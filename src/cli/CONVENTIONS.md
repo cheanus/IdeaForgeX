@@ -13,6 +13,8 @@ CLI 暴露知识图谱的查询层。生成创新点、多轮交互、论文发�
 | `random` | 随机探索 | agent 做头脑风暴时引入意外发现 |
 | `relate` | 路径查询 | agent 想知道两个节点之间有何联系 |
 | `delete-node` | 删除节点 + 级联清理 | 维护：删除论文/灵感/问题 |
+| `batch-train` | 并行训练 + 定期压缩 | 批量导入多篇论文，加速构建图谱 |
+| `compact` | 语义合并重复节点 | 压缩并行训练产生的语义相近节点 |
 
 ## 输出格式
 
@@ -50,7 +52,9 @@ CLI 暴露知识图谱的查询层。生成创新点、多轮交互、论文发�
 
 ## 文件职责
 
-`queries.py` 包含 `cmd_retrieve` / `cmd_inspect` / `cmd_random` / `cmd_relate` 函数实现 + 输出格式化。
+`queries.py` 包含 `cmd_retrieve` / `cmd_inspect` / `cmd_random` / `cmd_relate` / `cmd_batch_train` / `cmd_compact` 函数实现 + 输出格式化。
+
+`batch-train` 通过 `ThreadPoolExecutor` 多线程并行训练，`compact_interval` 控制批次大小和压缩频率。`compact` 调用 `src/neo4j/compact.py` 执行合并算法。
 
 ## 实现约定
 

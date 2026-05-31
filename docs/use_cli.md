@@ -8,6 +8,8 @@
 |------|------|
 | `bootstrap` | 初始化 Neo4j schema，幂等 |
 | `train` | 将一篇论文提炼为灵感和问题，写入图谱 |
+| `batch-train` | 并行训练多篇论文，定期压缩合并重复节点 |
+| `compact` | 合并图谱中语义相近的重复节点 |
 | `retrieve` | 用自然语言描述搜索图谱，返回相关节点 |
 | `inspect` | 查看某个节点的全部细节（精化链 + 关联边 + 贡献论文） |
 | `random` | 随机探索，打破检索排序的路径依赖 |
@@ -75,6 +77,56 @@ uv run python main.py relate insp-abc123 insp-xyz789 --max-len 4
 ```
 
 查找两个节点之间的最短路径，返回中间节点序列和边序列。
+
+## 并行训练
+
+```bash
+# 命令行直接列多篇
+uv run python main.py batch-train 1706.03762 2010.11929 2103.00020 2103.14030
+
+# 从文件读取（每行一个论文标识）
+uv run python main.py batch-train --file papers.txt
+
+# 混用
+uv run python main.py batch-train 1706.03762 --file papers.txt
+```
+
+并行训练用多线程同时训练多篇论文，瓶颈在 LLM API 调用（I/O）。每 `compact_interval` 篇完成后自动触发一次图压缩，全部完成后执行最终压缩。
+
+输出 JSON 格式的结果摘要：
+```json
+{
+  "总论文数": 20,
+  "成功数": 18,
+  "失败数": 2,
+  "成功列表": ["1706.03762", "2010.11929", ...],
+  "失败列表": [
+    {"论文": "2301.00001", "错误": "LLM JSON 解析失败"}
+  ]
+}
+```
+
+## 图压缩
+
+```bash
+# 执行全图压缩，合并语义相近的重复节点
+uv run python main.py compact
+
+# 仅报告将合并的节点，不实际执行
+uv run python main.py compact --dry-run
+```
+
+并行训练可能产生语义相近的重复节点（并发窗口内互不可见），`compact` 负责事后合并。合并保持细化链树结构（仅同粒度且上游一致的节点才合并）。
+
+输出 JSON 格式的压缩报告：
+```json
+{
+  "merged_inspirations": {"总量": 5, "粒1": 2, "粒2": 2, "粒3": 1},
+  "merged_questions": {"总量": 3},
+  "removed_duplicate_edges": 4,
+  "dry_run": false
+}
+```
 
 ## 删除节点
 
