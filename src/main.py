@@ -8,6 +8,8 @@ import logging
 
 from src.agent.training import build_training_graph, run_training
 from src.cli.queries import (
+    cmd_batch_train,
+    cmd_compact,
     cmd_delete_node,
     cmd_inspect,
     cmd_random,
@@ -81,6 +83,22 @@ def build_parser() -> argparse.ArgumentParser:
     relate.add_argument("id_a", help="起始节点 ID")
     relate.add_argument("id_b", help="目标节点 ID")
     relate.add_argument("--max_len", type=int, default=6, help="最长路径跳数")
+
+    batch_train = subparsers.add_parser("batch-train")
+    batch_train.add_argument(
+        "papers", nargs="*", help="论文 ID 列表（arXiv ID 或标题），可从命令行传入"
+    )
+    batch_train.add_argument(
+        "--file", type=str, default=None, help="文件路径，每行一个论文标识"
+    )
+
+    compact = subparsers.add_parser("compact")
+    compact.add_argument(
+        "--dry-run",
+        action="store_true",
+        dest="compact_dry_run",
+        help="仅报告将合并的节点，不实际执行",
+    )
     return parser
 
 
@@ -173,6 +191,32 @@ def main() -> None:
                 "路径查询完成，%s",
                 "已连通" if result["connected"] else "未连通",
             )
+            _json_print(result)
+            return
+        if args.command == "batch-train":
+            papers: list[str] = list(args.papers or [])
+            if args.file:
+                with open(args.file, "r", encoding="utf-8") as f:
+                    for line in f:
+                        stripped = line.strip()
+                        if stripped and not stripped.startswith("#"):
+                            papers.append(stripped)
+            if not papers:
+                _logger.warning("未提供任何论文标识，退出")
+                return
+            _logger.info(
+                "开始批量训练，共 %d 篇论文，并发数 %d",
+                len(papers),
+                config.batch_concurrency,
+            )
+            cmd_batch_train(config, llm_client, neo4j_client, papers)
+            return
+        if args.command == "compact":
+            _logger.info(
+                "开始图压缩，模式=%s",
+                "dry-run（仅报告）" if args.compact_dry_run else "正式执行",
+            )
+            result = cmd_compact(config, neo4j_client, dry_run=args.compact_dry_run)
             _json_print(result)
             return
         if args.command == "stats":
