@@ -14,13 +14,35 @@ from tests.fakes import (
     ATTENTION_TITLE,
     TEST_ARXIV_ID,
     TEST_OPENALEX_ID,
+    TEST_OPENALEX_URL,
     FakeArxivExtractor,
     FakeOpenAlexClient,
 )
 
 
+def test_arxiv_prefix_direct_lookup(monkeypatch):
+    """arxiv: 前缀应直接走 arXiv 路径。"""
+    config = Config(short_abstract_threshold=200)
+    monkeypatch.setattr("src.paper.resolver.ArxivExtractor", FakeArxivExtractor)
+
+    result = resolve_paper_spec(config, "arxiv:1706.03762")
+
+    assert result["paper_id"] == TEST_ARXIV_ID
+    assert result["title"] == ATTENTION_TITLE
+
+
+def test_openalex_prefix_direct_lookup(monkeypatch):
+    """openalex: 前缀应直接走 OpenAlex 路径。"""
+    config = Config(short_abstract_threshold=200)
+    monkeypatch.setattr("src.paper.resolver.OpenAlexClient", FakeOpenAlexClient)
+
+    result = resolve_paper_spec(config, "openalex:W3167826310")
+
+    assert result["paper_id"] == TEST_OPENALEX_ID
+
+
 def test_resolve_paper_spec_resolves_arxiv_id_directly(monkeypatch):
-    """arXiv ID 格式应直接走 arXiv 路径，不经过 OpenAlex。"""
+    """arXiv ID 正则命中后直接 arXiv 查询。"""
     config = Config(short_abstract_threshold=200)
     monkeypatch.setattr("src.paper.resolver.ArxivExtractor", FakeArxivExtractor)
 
@@ -31,23 +53,50 @@ def test_resolve_paper_spec_resolves_arxiv_id_directly(monkeypatch):
     assert result["text"] == ATTENTION_ABSTRACT[:500]
 
 
-def test_arxiv_title_search_succeeds_skips_openalex(monkeypatch):
-    """arXiv 标题搜索优先，命中后不再调用 OpenAlex。"""
+def test_openalex_id_direct_lookup(monkeypatch):
+    """OpenAlex work ID（W+数字）应直接走 OpenAlex 直查。"""
+    config = Config(short_abstract_threshold=200)
+    monkeypatch.setattr("src.paper.resolver.OpenAlexClient", FakeOpenAlexClient)
+
+    result = resolve_paper_spec(config, "W3167826310")
+
+    assert result["paper_id"] == TEST_OPENALEX_ID
+    assert result["text"] == "short abstract"
+
+
+def test_title_search_openalex_first(monkeypatch):
+    """标题搜索时 OpenAlex 优先，命中后不再调用 arXiv。"""
     config = Config(short_abstract_threshold=200)
 
     call_log: list[str] = []
 
-    class SpyOpenAlexClient:
+    class SpyArxivExtractor:
         def __init__(self, c):
-            call_log.append("OpenAlex.__init__")
+            call_log.append("Arxiv.__init__")
 
-        def search_papers(self, query, limit=50):
-            call_log.append("OpenAlex.search_papers")
+        def find_arxiv_id(self, paper):
+            call_log.append("Arxiv.find_arxiv_id")
 
-        def get_paper_detail(self, paper_id):
-            call_log.append("OpenAlex.get_paper_detail")
+        def get_paper_detail(self, arxiv_id):
+            call_log.append("Arxiv.get_paper_detail")
 
-    monkeypatch.setattr("src.paper.resolver.OpenAlexClient", SpyOpenAlexClient)
+        def fetch_full_text(self, arxiv_id):
+            call_log.append("Arxiv.fetch_full_text")
+
+    monkeypatch.setattr("src.paper.resolver.OpenAlexClient", FakeOpenAlexClient)
+    monkeypatch.setattr("src.paper.resolver.ArxivExtractor", SpyArxivExtractor)
+
+    result = resolve_paper_spec(config, "Attention Is All You Need")
+
+    assert result["paper_id"] == TEST_OPENALEX_ID
+    assert result["text"] == "short abstract"
+    assert call_log == []  # arXiv 从未被调用
+
+
+def test_title_search_falls_back_to_arxiv(monkeypatch):
+    """OpenAlex 标题搜索无结果时降级到 arXiv。"""
+    config = Config(short_abstract_threshold=200)
+    monkeypatch.setattr("src.paper.resolver._try_openalex_search", lambda c, t: None)
     monkeypatch.setattr("src.paper.resolver.ArxivExtractor", FakeArxivExtractor)
 
     result = resolve_paper_spec(config, "Attention Is All You Need")
@@ -55,20 +104,6 @@ def test_arxiv_title_search_succeeds_skips_openalex(monkeypatch):
     assert result["title"] == ATTENTION_TITLE
     assert result["paper_id"] == TEST_ARXIV_ID
     assert result["text"] == ATTENTION_ABSTRACT
-    assert call_log == []  # OpenAlex 从未被调用
-
-
-def test_resolve_paper_spec_falls_back_to_openalex_when_arxiv_fails(monkeypatch):
-    """arXiv 标题搜索无结果时降级到 OpenAlex 语义搜索。"""
-    config = Config(short_abstract_threshold=200)
-    monkeypatch.setattr("src.paper.resolver._try_arxiv_fallback", lambda c, t: None)
-    monkeypatch.setattr("src.paper.resolver.OpenAlexClient", FakeOpenAlexClient)
-
-    result = resolve_paper_spec(config, "Attention Is All You Need")
-
-    assert result["title"] == ATTENTION_TITLE
-    assert result["paper_id"] == TEST_OPENALEX_ID
-    assert result["text"] == "short abstract"
 
 
 @pytest.mark.neo4j

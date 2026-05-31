@@ -36,9 +36,9 @@ OpenAlex 的 abstract 存储为 `abstract_inverted_index`（词→位置映射�
 
 `resolver.py` 提供 `resolve_paper_spec()` 实现多级降级解析：
 
-1. arXiv ID 格式 → 直接 arXiv 查询 → `paper_id = "arxiv-{id}"`
-2. arXiv 标题搜索 → 全文 PDF 降级 → `paper_id = "arxiv-{id}"`
-3. OpenAlex 搜索 → `paper_id = "openalex-{work_id}"`
+1. 来源前缀 → `arxiv:XXX` 直查 arXiv，`openalex:XXX` 直查 OpenAlex
+2. ID 正则识别 → 匹配 arXiv（`\d{4}\.\d{4,5}`）或 OpenAlex（`W\d{7,}`）直查，失败继续降级
+3. 标题搜索 → OpenAlex 优先，arXiv 兜底
 
 所有 Paper 节点 ID 统一为 `paper-{paper_id}` 格式（如 `paper-arxiv-1706.03762`、`paper-openalex-W3167826310`）。
 

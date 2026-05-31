@@ -1,9 +1,7 @@
 """论文记录解析与降级。
 
-resolve_paper_spec() 接受论文 ID 或标题，按以下优先级尝试获取数据：
-1. arXiv ID 格式 → 直接 arXiv 查询
-2. arXiv 标题搜索 → 全文 PDF 降级
-3. OpenAlex 语义搜索
+resolve_paper_spec() 接受论文 ID 或标题，支持来源前缀（arxiv:/openalex:）和 ID 自动识别。
+无前缀时的路由优先级：来源前缀 > ID 正则匹配 > 标题搜索（OpenAlex 优先，arXiv 兜底）。
 """
 
 from __future__ import annotations
@@ -22,6 +20,8 @@ from src.paper.discovery import OpenAlexClient, _extract_work_id, _reconstruct_a
 from src.paper.extractor import ArxivExtractor
 
 _ARXIV_ID_PATTERN = re.compile(r"^\d{4}\.\d{4,5}(?:v\d+)?$|^[a-z-]+/\d{7}(?:v\d+)?$")
+_OPENALEX_ID_PATTERN = re.compile(r"^W\d{7,}$", re.IGNORECASE)
+_PREFIX_PATTERN = re.compile(r"^(arxiv|openalex):", re.IGNORECASE)
 _MAX_TEXT_LENGTH = 12000
 
 
@@ -33,9 +33,22 @@ class PaperRecord(TypedDict):
     paper: dict[str, Any]
 
 
+def _strip_prefix(spec: str) -> tuple[str | None, str]:
+    """解析来源前缀，返回 (来源, 无前缀文本)。无前缀时来源为 None。"""
+    m = _PREFIX_PATTERN.match(spec)
+    if m:
+        return m.group(1).lower(), spec[m.end() :].strip()
+    return None, spec
+
+
 def _is_arxiv_id(spec: str) -> bool:
     """判断输入是否为 arXiv ID 格式。"""
     return bool(_ARXIV_ID_PATTERN.match(spec.strip()))
+
+
+def _is_openalex_id(spec: str) -> bool:
+    """判断输入是否为 OpenAlex work ID 格式（W + 数字）。"""
+    return bool(_OPENALEX_ID_PATTERN.match(spec.strip()))
 
 
 def _resolve_text(
@@ -68,8 +81,31 @@ def _load_from_arxiv(config: Config, arxiv_id: str) -> PaperRecord:
     }
 
 
+def _load_from_openalex(config: Config, work_id: str) -> PaperRecord:
+    """已知 OpenAlex work ID，直接查询论文详情。"""
+    client = OpenAlexClient(config)
+    short_id = _extract_work_id(work_id)
+    paper = client.get_paper_detail(short_id)
+    title = paper.get("title", work_id)
+    abstract = _reconstruct_abstract(paper.get("abstract_inverted_index"))
+    year = str(paper.get("publication_year", ""))
+    text = abstract
+    if len(abstract) < config.short_abstract_threshold and short_id:
+        _logger.info("OpenAlex 摘要过短，尝试下载 PDF …")
+        full_text = client.download_pdf(short_id)
+        if full_text:
+            text = full_text
+    return {
+        "paper_id": f"openalex-{short_id}" if short_id else f"openalex-{work_id}",
+        "title": title,
+        "text": text,
+        "year": year,
+        "paper": paper,
+    }
+
+
 def _try_openalex_search(config: Config, query: str) -> PaperRecord | None:
-    """通过 OpenAlex 搜索查找论文，返回第一篇的详细信息。"""
+    """通过 OpenAlex 标题搜索查找论文，返回第一篇的详细信息。"""
     client = OpenAlexClient(config)
     papers = client.search_papers(query, limit=3)
     if not papers:
@@ -121,16 +157,29 @@ def _enforce_text_limit(text: str) -> str:
 
 
 def resolve_paper_spec(config: Config, spec: str) -> PaperRecord:
-    """智能解析论文描述（ID 或标题），多级降级获取数据。
+    """智能解析论文描述，支持来源前缀、ID 正则识别和多级降级。
 
-    优先级：
-    1. arXiv ID 格式 → 直接 arXiv 查询
-    2. arXiv 标题搜索 → 全文 PDF 降级
-    3. OpenAlex 语义搜索
+    路由优先级：
+    1. 来源前缀（arxiv: / openalex:） → 直查，失败报错
+    2. ID 正则匹配 → 优先直查，失败降级到标题搜索
+    3. 标题搜索 → OpenAlex 优先，arXiv 兜底
     """
     spec = spec.strip()
 
-    # 优先级1：arXiv ID 快速路径
+    # ── 1. 来源前缀 ──
+    source, raw_spec = _strip_prefix(spec)
+    if source == "arxiv":
+        _logger.info("来源前缀 arxiv:，直查 arXiv …")
+        result = _load_from_arxiv(config, raw_spec)
+        result["text"] = _enforce_text_limit(result["text"])
+        return result
+    if source == "openalex":
+        _logger.info("来源前缀 openalex:，直查 OpenAlex …")
+        result = _load_from_openalex(config, raw_spec)
+        result["text"] = _enforce_text_limit(result["text"])
+        return result
+
+    # ── 2. ID 正则优先直查（失败则继续降级） ──
     if _is_arxiv_id(spec):
         try:
             result = _load_from_arxiv(config, spec)
@@ -138,53 +187,39 @@ def resolve_paper_spec(config: Config, spec: str) -> PaperRecord:
             _logger.info("论文解析完成，数据源: arXiv ID 直查")
             return result
         except Exception as exc:
-            _logger.info("arXiv ID 查询失败，尝试标题搜索 … %s", exc)
-        # arXiv ID 查询失败，继续尝试其他方式
+            _logger.info("arXiv ID 查询失败: %s，继续降级 …", exc)
 
-    title = spec
-    text = ""
-    paper: dict[str, Any] = {}
-    paper_id = spec
+    if _is_openalex_id(spec):
+        try:
+            result = _load_from_openalex(config, spec)
+            result["text"] = _enforce_text_limit(result["text"])
+            _logger.info("论文解析完成，数据源: OpenAlex ID 直查")
+            return result
+        except Exception as exc:
+            _logger.info("OpenAlex ID 查询失败: %s，继续降级 …", exc)
 
-    # 优先级2：arXiv 标题搜索 + 全文降级
+    # ── 3. 标题搜索：OpenAlex 优先，arXiv 兜底 ──
+    _logger.info("尝试标题搜索，OpenAlex 优先 …")
     try:
-        result = _try_arxiv_fallback(config, title)
-        if result:
-            paper = result["paper"]
-            title = result["title"]
-            text = result["text"]
-            paper_id = result["paper_id"]
+        result = _try_openalex_search(config, spec)
+        if result and result["text"].strip():
+            result["text"] = _enforce_text_limit(result["text"])
+            _logger.info("论文解析完成，数据源: OpenAlex 标题搜索")
+            return result
+    except Exception as exc:
+        _logger.warning("OpenAlex 标题搜索失败: %s", exc)
+
+    _logger.info("OpenAlex 未命中，尝试 arXiv 标题搜索 …")
+    try:
+        result = _try_arxiv_fallback(config, spec)
+        if result and result["text"].strip():
+            result["text"] = _enforce_text_limit(result["text"])
+            _logger.info("论文解析完成，数据源: arXiv 标题搜索")
+            return result
     except Exception as exc:
         _logger.warning("arXiv 标题搜索失败: %s", exc)
 
-    if text.strip():
-        _logger.info("论文解析完成，数据源: arXiv 标题搜索")
-
-    # 优先级3：OpenAlex 语义搜索（arxiv 未获取到内容时启用）
-    if not text.strip():
-        _logger.info("arXiv 未获取到内容，尝试 OpenAlex 搜索 …")
-        try:
-            result = _try_openalex_search(config, spec)
-            if result:
-                paper = result["paper"]
-                title = result["title"]
-                text = result["text"]
-                paper_id = result["paper_id"]
-                _logger.info("论文解析完成，数据源: OpenAlex 语义搜索")
-        except Exception as exc:
-            _logger.warning("OpenAlex 搜索也失败: %s", exc)
-
-    if not text.strip():
-        raise ValueError(f"无法解析论文 '{spec}'：所有数据源均失败，未能获取论文内容")
-
-    year = paper.get("year", "")
-    return {
-        "paper_id": paper_id,
-        "title": title or spec,
-        "text": _enforce_text_limit(text),
-        "year": year,
-        "paper": paper,
-    }
+    raise ValueError(f"无法解析论文 '{spec}'：所有数据源均失败，未能获取论文内容")
 
 
 def build_practice_summary(client: Neo4jClient, limit: int = 12) -> str:
