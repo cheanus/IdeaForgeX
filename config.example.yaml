@@ -14,8 +14,7 @@ embedding_model_name: "Qwen/Qwen3-Embedding-4B"
 embedding_dim: 2560
 
 # ── 论文源 ──
-aminer_api_key: ""
-aminer_base_url: "https://datacenter.aminer.cn/gateway/open_platform"
+openalex_api_key: ""
 arxiv_api_url: "https://export.arxiv.org/api/query"
 arxiv_short_abstract_threshold: 200  # 摘要低于此字符数时触发全文 PDF 降级
 

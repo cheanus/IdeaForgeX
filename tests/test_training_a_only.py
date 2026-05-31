@@ -15,7 +15,7 @@ from src.models import Edge, InspirationNode, LLMACandidate, QuestionNode, Relat
 from tests.fakes import (
     ATTENTION_ABSTRACT,
     ATTENTION_TITLE,
-    FakeAMinerClient,
+    FakeOpenAlexClient,
     FakeArxivExtractor,
     TEST_PAPER_ID,
 )
@@ -88,7 +88,7 @@ def test_training_graph_routes_can_infer_to_commit_candidates(
         arxiv_short_abstract_threshold=200,
     )
 
-    monkeypatch.setattr("src.paper.resolver.AMinerClient", FakeAMinerClient)
+    monkeypatch.setattr("src.paper.resolver.OpenAlexClient", FakeOpenAlexClient)
     monkeypatch.setattr("src.paper.resolver.ArxivExtractor", FakeArxivExtractor)
     monkeypatch.setattr(
         "src.agent.training.retrieve_with_traversal",
@@ -142,7 +142,7 @@ def test_training_graph_commits_candidates_when_cannot_infer(monkeypatch, neo4j_
     )
     dim = config.embedding_dim
 
-    monkeypatch.setattr("src.paper.resolver.AMinerClient", FakeAMinerClient)
+    monkeypatch.setattr("src.paper.resolver.OpenAlexClient", FakeOpenAlexClient)
     monkeypatch.setattr("src.paper.resolver.ArxivExtractor", FakeArxivExtractor)
     monkeypatch.setattr(
         "src.agent.training.retrieve_with_traversal",
@@ -245,7 +245,7 @@ def test_training_graph_commits_node_updates(monkeypatch, neo4j_client):
     ) as session:
         session.execute_write(create_inspiration, existing)
 
-    monkeypatch.setattr("src.paper.resolver.AMinerClient", FakeAMinerClient)
+    monkeypatch.setattr("src.paper.resolver.OpenAlexClient", FakeOpenAlexClient)
     monkeypatch.setattr("src.paper.resolver.ArxivExtractor", FakeArxivExtractor)
     monkeypatch.setattr(
         "src.agent.training.retrieve_with_traversal",
@@ -302,7 +302,7 @@ def test_training_graph_skips_duplicate(monkeypatch, neo4j_client):
         arxiv_short_abstract_threshold=200,
     )
 
-    monkeypatch.setattr("src.paper.resolver.AMinerClient", FakeAMinerClient)
+    monkeypatch.setattr("src.paper.resolver.OpenAlexClient", FakeOpenAlexClient)
     monkeypatch.setattr("src.paper.resolver.ArxivExtractor", FakeArxivExtractor)
 
     # 预先在图中创建 Paper 节点，模拟已训练

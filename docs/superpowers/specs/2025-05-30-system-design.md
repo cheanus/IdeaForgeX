@@ -10,7 +10,7 @@ IdeaForgeX 是一个 Agent 框架，训练时通过 LLM 从论文中提炼可复
 - **论文节点**：`Paper` 节点存储论文元数据，通过 `PAPER_CONTRIBUTES` 边与灵感/问题双向关联，替代独立的 SQLite 论文库。
 - **多粒度精化链**：每个方法概念以 N 个 Inspiration 节点表示（N ≥ 1），`粒度` 整数字段（1=抽象范式/2=通用方法/3=技术实现）区分层级，精化边（有向，低→高，严格 N→N+1 递进）串联。
 - **边附权重**：每条边附带 `weight: float`，LLM 给定 0~1 分，用于检索排序。
-- **论文来源**：AMiner API 发现全网论文 + 获取摘要（付费，成本极低）；arXiv API 仅作全文备选（免费）。
+- **论文来源**：OpenAlex API 发现全网论文 + 获取摘要（低成本）；arXiv API 仅作全文备选（免费）。
 - **配置驱动**：Embedding 维度、检索 top-k、hop 上限、分数衰减等变量全部可配置，不在代码中硬编码。
 
 ## 3. 三大库
@@ -142,7 +142,7 @@ CLI 只负责查询（`retrieve` / `inspect` / `random` / `relate`）。范式�
 | Agent 框架 | LangGraph |
 | LLM SDK | openai |
 | 图数据库 | Neo4j Community |
-| 论文来源 | AMiner API (付费) + arXiv (免费备选) |
+| 论文来源 | OpenAlex API (低成本) + arXiv (免费备选) |
 | 向量检索 | Neo4j HNSW 向量索引 |
 | 数据验证 | pydantic |
 | 包管理 | uv |
@@ -172,7 +172,7 @@ IdeaForgeX/
 ### 8.3 数据流
 
 ```
-AMiner API (发现+摘要) → 论文内容 → LangGraph Agent (LLM A) → OpenAI 兼容 API
+OpenAlex API (发现+摘要) → 论文内容 → LangGraph Agent (LLM A) → OpenAI 兼容 API
   → Neo4j (Inspiration×N + Question 节点 + 4种边 + HNSW向量索引)
 ```
 
@@ -189,6 +189,6 @@ V1 仅保留 LLM A。训练用 2 次 LLM 调用：
 
 - LLM JSON 解析失败：自动重试，超过 `max_retries` 终止
 - Neo4j 连接失败：抛异常退出，不静默
-- AMiner API 失败：重试 3 次，仍失败跳过该论文
+- OpenAlex API 失败：重试 3 次（指数退避），仍失败跳过该论文
 - arXiv 全文获取失败：降级为仅用摘要
 - 向量索引不存在：启动时幂等创建

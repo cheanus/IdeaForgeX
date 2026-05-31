@@ -13,40 +13,41 @@ from tests.fakes import (
     ATTENTION_ABSTRACT,
     ATTENTION_TITLE,
     TEST_ARXIV_ID,
-    FakeAMinerClient,
+    TEST_OPENALEX_ID,
     FakeArxivExtractor,
+    FakeOpenAlexClient,
 )
 
 
 def test_resolve_paper_spec_resolves_arxiv_id_directly(monkeypatch):
-    """arXiv ID 格式应直接走 arXiv 路径，不经过 AMiner。"""
+    """arXiv ID 格式应直接走 arXiv 路径，不经过 OpenAlex。"""
     config = Config(arxiv_short_abstract_threshold=200)
     monkeypatch.setattr("src.paper.resolver.ArxivExtractor", FakeArxivExtractor)
 
     result = resolve_paper_spec(config, "1706.03762")
 
-    assert result["paper_id"] == "1706.03762"
+    assert result["paper_id"] == TEST_ARXIV_ID
     assert result["title"] == ATTENTION_TITLE
     assert result["text"] == ATTENTION_ABSTRACT[:500]
 
 
-def test_arxiv_title_search_succeeds_skips_aminer(monkeypatch):
-    """arXiv 标题搜索优先，命中后不再调用 AMiner。"""
+def test_arxiv_title_search_succeeds_skips_openalex(monkeypatch):
+    """arXiv 标题搜索优先，命中后不再调用 OpenAlex。"""
     config = Config(arxiv_short_abstract_threshold=200)
 
     call_log: list[str] = []
 
-    class SpyAMinerClient:
+    class SpyOpenAlexClient:
         def __init__(self, c):
-            call_log.append("AMiner.__init__")
+            call_log.append("OpenAlex.__init__")
 
         def search_papers(self, query, limit=50):
-            call_log.append("AMiner.search_papers")
+            call_log.append("OpenAlex.search_papers")
 
         def get_paper_detail(self, paper_id):
-            call_log.append("AMiner.get_paper_detail")
+            call_log.append("OpenAlex.get_paper_detail")
 
-    monkeypatch.setattr("src.paper.resolver.AMinerClient", SpyAMinerClient)
+    monkeypatch.setattr("src.paper.resolver.OpenAlexClient", SpyOpenAlexClient)
     monkeypatch.setattr("src.paper.resolver.ArxivExtractor", FakeArxivExtractor)
 
     result = resolve_paper_spec(config, "Attention Is All You Need")
@@ -54,19 +55,19 @@ def test_arxiv_title_search_succeeds_skips_aminer(monkeypatch):
     assert result["title"] == ATTENTION_TITLE
     assert result["paper_id"] == TEST_ARXIV_ID
     assert result["text"] == ATTENTION_ABSTRACT
-    assert call_log == []  # AMiner 从未被调用
+    assert call_log == []  # OpenAlex 从未被调用
 
 
-def test_resolve_paper_spec_falls_back_to_aminer_when_arxiv_fails(monkeypatch):
-    """arXiv 标题搜索无结果时降级到 AMiner 语义搜索。"""
+def test_resolve_paper_spec_falls_back_to_openalex_when_arxiv_fails(monkeypatch):
+    """arXiv 标题搜索无结果时降级到 OpenAlex 语义搜索。"""
     config = Config(arxiv_short_abstract_threshold=200)
     monkeypatch.setattr("src.paper.resolver._try_arxiv_fallback", lambda c, t: None)
-    monkeypatch.setattr("src.paper.resolver.AMinerClient", FakeAMinerClient)
+    monkeypatch.setattr("src.paper.resolver.OpenAlexClient", FakeOpenAlexClient)
 
     result = resolve_paper_spec(config, "Attention Is All You Need")
 
     assert result["title"] == ATTENTION_TITLE
-    assert result["paper_id"] == TEST_ARXIV_ID
+    assert result["paper_id"] == TEST_OPENALEX_ID
     assert result["text"] == "short abstract"
 
 

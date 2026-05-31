@@ -3,7 +3,7 @@
 resolve_paper_spec() 接受论文 ID 或标题，按以下优先级尝试获取数据：
 1. arXiv ID 格式 → 直接 arXiv 查询
 2. arXiv 标题搜索 → 全文 PDF 降级
-3. AMiner 语义搜索
+3. OpenAlex 语义搜索
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from src.config import Config
 from src.neo4j.client import Neo4jClient
 
 _logger = logging.getLogger("ideaforgex")
-from src.paper.discovery import AMinerClient
+from src.paper.discovery import OpenAlexClient, _extract_work_id, _reconstruct_abstract
 from src.paper.extractor import ArxivExtractor
 
 _ARXIV_ID_PATTERN = re.compile(r"^\d{4}\.\d{4,5}(?:v\d+)?$|^[a-z-]+/\d{7}(?:v\d+)?$")
@@ -60,7 +60,7 @@ def _load_from_arxiv(config: Config, arxiv_id: str) -> PaperRecord:
     text = _resolve_text(config, extractor, arxiv_id, detail.get("abstract", ""))
     year = detail.get("year", "")
     return {
-        "paper_id": arxiv_id,
+        "paper_id": f"arxiv-{arxiv_id}",
         "title": title or arxiv_id,
         "text": text,
         "year": year,
@@ -68,25 +68,24 @@ def _load_from_arxiv(config: Config, arxiv_id: str) -> PaperRecord:
     }
 
 
-def _try_aminer_search(config: Config, query: str) -> PaperRecord | None:
-    """通过 AMiner 语义搜索查找论文，返回第一篇的详细信息。"""
-    client = AMinerClient(config)
+def _try_openalex_search(config: Config, query: str) -> PaperRecord | None:
+    """通过 OpenAlex 搜索查找论文，返回第一篇的详细信息。"""
+    client = OpenAlexClient(config)
     papers = client.search_papers(query, limit=3)
     if not papers:
         return None
-    best_id = papers[0].get("id")
-    if not best_id:
-        return None
-    paper = client.get_paper_detail(best_id)
-    title = paper.get("title", query)
-    text = paper.get("abstract_slice") or paper.get("abstract") or ""
-    year = str(paper.get("year", ""))
+    best = papers[0]
+    work_id = best.get("id", "")
+    short_id = _extract_work_id(work_id) if work_id else ""
+    title = best.get("title", query)
+    abstract = _reconstruct_abstract(best.get("abstract_inverted_index"))
+    year = str(best.get("publication_year", ""))
     return {
-        "paper_id": best_id,
+        "paper_id": f"openalex-{short_id}" if short_id else query,
         "title": title,
-        "text": text,
+        "text": abstract,
         "year": year,
-        "paper": paper,
+        "paper": best,
     }
 
 
@@ -101,7 +100,7 @@ def _try_arxiv_fallback(config: Config, title: str) -> PaperRecord | None:
     text = _resolve_text(config, extractor, arxiv_id, detail.get("abstract", ""))
     year = detail.get("year", "")
     return {
-        "paper_id": arxiv_id,
+        "paper_id": f"arxiv-{arxiv_id}",
         "title": result_title,
         "text": text,
         "year": year,
@@ -121,7 +120,7 @@ def resolve_paper_spec(config: Config, spec: str) -> PaperRecord:
     优先级：
     1. arXiv ID 格式 → 直接 arXiv 查询
     2. arXiv 标题搜索 → 全文 PDF 降级
-    3. AMiner 语义搜索
+    3. OpenAlex 语义搜索
     """
     spec = spec.strip()
 
@@ -155,19 +154,19 @@ def resolve_paper_spec(config: Config, spec: str) -> PaperRecord:
     if text.strip():
         _logger.info("论文解析完成，数据源: arXiv 标题搜索")
 
-    # 优先级3：AMiner 语义搜索（arxiv 未获取到内容时启用）
+    # 优先级3：OpenAlex 语义搜索（arxiv 未获取到内容时启用）
     if not text.strip():
-        _logger.info("arXiv 未获取到内容，尝试 AMiner 搜索 …")
+        _logger.info("arXiv 未获取到内容，尝试 OpenAlex 搜索 …")
         try:
-            result = _try_aminer_search(config, spec)
+            result = _try_openalex_search(config, spec)
             if result:
                 paper = result["paper"]
                 title = result["title"]
                 text = result["text"]
                 paper_id = result["paper_id"]
-                _logger.info("论文解析完成，数据源: AMiner 语义搜索")
+                _logger.info("论文解析完成，数据源: OpenAlex 语义搜索")
         except Exception as exc:
-            _logger.warning("AMiner 搜索也失败: %s", exc)
+            _logger.warning("OpenAlex 搜索也失败: %s", exc)
 
     if not text.strip():
         raise ValueError(f"无法解析论文 '{spec}'：所有数据源均失败，未能获取论文内容")

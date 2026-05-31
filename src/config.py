@@ -34,10 +34,7 @@ class Config(BaseSettings):
     llm_json_mode: bool = Field(default=True)
     llm_thinking_enabled: bool = Field(default=False)
     max_retries: int = Field(default=3)
-    aminer_api_key: str = Field(default="")
-    aminer_base_url: str = Field(
-        default="https://datacenter.aminer.cn/gateway/open_platform"
-    )
+    openalex_api_key: str = Field(default="")
     arxiv_api_url: str = Field(default="https://export.arxiv.org/api/query")
     neo4j_uri: str = Field(default="bolt://localhost:7688")
     neo4j_user: str = Field(default="neo4j")

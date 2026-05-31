@@ -11,20 +11,29 @@ ATTENTION_ABSTRACT = (
     "We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, "
     "dispensing with recurrence and convolutions."
 )
-TEST_PAPER_ID = "paper-1706.03762"
-TEST_ARXIV_ID = "1706.03762"
+TEST_PAPER_ID = "paper-arxiv-1706.03762"
+TEST_ARXIV_ID = "arxiv-1706.03762"
+TEST_OPENALEX_ID = "openalex-W3167826310"
+TEST_OPENALEX_URL = "https://openalex.org/W3167826310"
 
 
-class FakeAMinerClient:
-    """返回固定论文数据的 AMiner 客户端。"""
+class FakeOpenAlexClient:
+    """返回固定论文数据的 OpenAlex 客户端。"""
 
     def __init__(self, config: Config, *, should_fail: bool = False):
         self.config = config
         self.should_fail = should_fail
 
     def search_papers(self, query: str, limit: int = 50):
-        """模拟语义搜索，返回匹配的论文列表。"""
-        return [{"id": TEST_ARXIV_ID, "title": query}]
+        """模拟搜索，返回匹配的论文列表。"""
+        return [
+            {
+                "id": TEST_OPENALEX_URL,
+                "title": query,
+                "abstract_inverted_index": {"short": [0], "abstract": [1]},
+                "publication_year": 2017,
+            }
+        ]
 
     def get_paper_detail(self, paper_id: str):
         if self.should_fail:
@@ -38,7 +47,8 @@ class FakeAMinerClient:
         return {
             "id": paper_id,
             "title": ATTENTION_TITLE,
-            "abstract_slice": "short abstract",
+            "abstract_inverted_index": {"short": [0], "abstract": [1]},
+            "publication_year": 2017,
         }
 
 
@@ -56,7 +66,7 @@ class FakeArxivExtractor:
         }
 
     def find_arxiv_id(self, paper: dict):
-        return TEST_ARXIV_ID
+        return TEST_ARXIV_ID.replace("arxiv-", "")
 
     def fetch_full_text(self, arxiv_id: str):
         return ATTENTION_ABSTRACT
