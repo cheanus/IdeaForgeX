@@ -17,6 +17,7 @@ from tests.fakes import (
     ATTENTION_TITLE,
     FakeOpenAlexClient,
     FakeArxivExtractor,
+    TEST_ARXIV_ID,
     TEST_PAPER_ID,
 )
 
@@ -127,7 +128,7 @@ def test_training_graph_routes_can_infer_to_commit_candidates(
         database=neo4j_client.config.neo4j_database
     ) as session:
         paper = session.run(
-            "MATCH (p:Paper {id: 'paper-1706.03762'}) RETURN p"
+            "MATCH (p:Paper {id: $id}) RETURN p", id=TEST_PAPER_ID
         ).single()
         assert paper is not None
         assert paper["p"]["title"] == ATTENTION_TITLE
@@ -178,11 +179,11 @@ def test_training_graph_commits_candidates_when_cannot_infer(monkeypatch, neo4j_
 
     monkeypatch.setattr("src.agent.training.call_with_retry", fake_call_with_retry)
 
-    raw_paper_id = "1706.03762"
+    raw_paper_id = TEST_ARXIV_ID
     graph = build_training_graph(config, FakeEmbeddingClient(), neo4j_client)  # type: ignore[reportArgumentType]
     result = graph.invoke(
-        {"paper_id": raw_paper_id, "retry_count": 0},  # type: ignore[reportArgumentType]
-        {"configurable": {"thread_id": raw_paper_id}},
+        {"paper_id": "1706.03762", "retry_count": 0},  # type: ignore[reportArgumentType]
+        {"configurable": {"thread_id": "1706.03762"}},
     )
 
     assert result["can_infer"] is False
@@ -211,15 +212,16 @@ def test_training_graph_commits_candidates_when_cannot_infer(monkeypatch, neo4j_
 
         # 验证 Paper 节点已创建
         paper = session.run(
-            "MATCH (p:Paper {id: 'paper-1706.03762'}) RETURN p"
+            "MATCH (p:Paper {id: $id}) RETURN p", id=TEST_PAPER_ID
         ).single()
         assert paper is not None
 
         # 验证 PAPER_CONTRIBUTES 边已创建
         pc_count = session.run(
-            f"MATCH (p:Paper {{id: 'paper-1706.03762'}})"
-            f"-[r:PAPER_CONTRIBUTES]->(n) WHERE n.id IN ['{full_insp_id}', '{full_q_id}']"
-            "RETURN count(r) AS c"
+            "MATCH (p:Paper {id: $pid})"
+            "-[r:PAPER_CONTRIBUTES]->(n) WHERE n.id IN [$iid, $qid]"
+            "RETURN count(r) AS c",
+            pid=TEST_PAPER_ID, iid=full_insp_id, qid=full_q_id,
         ).single()["c"]
         assert pc_count == 2
 
@@ -287,9 +289,10 @@ def test_training_graph_commits_node_updates(monkeypatch, neo4j_client):
 
         # 验证 PAPER_CONTRIBUTES 边连接到了被更新的已有节点
         pc = session.run(
-            "MATCH (p:Paper {id: 'paper-1706.03762'})"
-            "-[r:PAPER_CONTRIBUTES]->(n {id: 'insp-existing'})"
-            "RETURN count(r) AS c"
+            "MATCH (p:Paper {id: $pid})"
+            "-[r:PAPER_CONTRIBUTES]->(n {id: $nid})"
+            "RETURN count(r) AS c",
+            pid=TEST_PAPER_ID, nid="insp-existing",
         ).single()
         assert pc["c"] == 1
 
@@ -310,8 +313,8 @@ def test_training_graph_skips_duplicate(monkeypatch, neo4j_client):
         database=neo4j_client.config.neo4j_database
     ) as session:
         session.run(
-            "CREATE (p:Paper {id: 'paper-1706.03762', title: $title, year: '2017', abstract: '', trained_at: ''})",
-            title=ATTENTION_TITLE,
+            "CREATE (p:Paper {id: $id, title: $title, year: '2017', abstract: '', trained_at: ''})",
+            id=TEST_PAPER_ID, title=ATTENTION_TITLE,
         )
 
     call_count = [0]
