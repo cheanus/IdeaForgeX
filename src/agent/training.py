@@ -41,8 +41,11 @@ from src.paper.resolver import (
 _logger = logging.getLogger("ideaforgex")
 
 
-class TrainingState(TypedDict, total=False):
+class _TrainingStateRequired(TypedDict):
     paper_id: str
+
+
+class TrainingState(_TrainingStateRequired, total=False):
     paper_title: str
     paper_year: str
     paper_text: str
@@ -114,7 +117,7 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
 
     def generate_query(state: TrainingState) -> dict:
         _logger.info("正在生成检索查询 …")
-        messages = build_query_generation_messages(state["paper_text"])
+        messages = build_query_generation_messages(state.get("paper_text", ""))
         result = call_with_retry(
             client,
             messages,
@@ -127,7 +130,7 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
 
     def retrieve(state: TrainingState) -> dict:
         _logger.info("正在检索知识图谱 …")
-        embeddings = client.embed([state["query_text"]])
+        embeddings = client.embed([state.get("query_text", "")])
         nodes = retrieve_with_traversal(neo4j_client, embeddings[0], config)
         _logger.info("知识图谱检索完成，命中 %d 条", len(nodes))
         return {"retrieved_nodes": nodes}
@@ -136,7 +139,7 @@ def build_training_graph(config: Config, client: ChatClient, neo4j_client: Neo4j
         _logger.info("正在 LLM 分析，判断可提炼性 …")
         practice_summary = build_practice_summary(neo4j_client)
         messages = build_llm_a_judge_messages(
-            state["paper_text"],
+            state.get("paper_text", ""),
             practice_summary,
             state.get("retrieved_nodes", []),
             paper_title=state.get("paper_title", ""),
