@@ -36,10 +36,14 @@
 python main.py batch-train 2301.0001 2301.0002 2301.0003
 
 # 从文件读取（每行一个论文查询）
-python main.py batch-train --file papers.txt
+python main.py batch-train --queries papers.txt
+
+# 从 JSONL 文件读取（跳过 API 解析）
+python main.py batch-train --jsonl papers.jsonl
 
 # 混用
-python main.py batch-train 2301.0001 --file papers.txt
+python main.py batch-train 2301.0001 --queries papers.txt
+python main.py batch-train --queries papers.txt --jsonl papers.jsonl
 ```
 
 ### 执行流程

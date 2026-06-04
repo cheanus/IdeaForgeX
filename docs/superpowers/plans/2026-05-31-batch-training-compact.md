@@ -954,7 +954,11 @@ git commit -m "cli: 新增 cmd_batch_train 批量并行训练命令"
         "papers", nargs="*", help="论文 ID 列表（arXiv ID 或标题），可从命令行传入"
     )
     batch_train.add_argument(
-        "--file", type=str, default=None, help="文件路径，每行一个论文标识"
+        "--queries", type=str, default=None, help="纯文本查询文件，每行一个论文标识"
+    )
+    batch_train.add_argument(
+        "--jsonl", type=str, default=None,
+        help='JSONL 文件，每行 {"id":"arxiv:1706.03762","title":"...","abstract":"..."}',
     )
 
     compact = subparsers.add_parser("compact")
@@ -1057,14 +1061,7 @@ uv run python main.py compact
 ```
 Expected: 第二次 `merged_inspirations: {"总量": 0}`
 
-- [ ] **Step 4: 运行 lint**
-
-```bash
-cd /home/test/Codes/IdeaForgeX && uv run ruff check src/
-```
-Expected: 无错误
-
-- [ ] **Step 5: 提交（如有 lint 修复）**
+- [ ] **Step 4: 提交**
 
 ```bash
 git add -A && git diff --cached --stat  # 检查变更范围

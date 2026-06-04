@@ -233,13 +233,6 @@ def main() -> None:
             )
             cmd_batch_train(config, llm_client, neo4j_client, papers, jsonl_records)
             return
-            _logger.info(
-                "开始批量训练，共 %d 篇论文，并发数 %d",
-                len(papers),
-                config.batch_concurrency,
-            )
-            cmd_batch_train(config, llm_client, neo4j_client, papers)
-            return
         if args.command == "compact":
             _logger.info(
                 "开始图压缩，模式=%s",

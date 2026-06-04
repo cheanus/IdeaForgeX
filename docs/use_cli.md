@@ -85,13 +85,24 @@ uv run python main.py relate insp-abc123 insp-xyz789 --max-len 4
 uv run python main.py batch-train 1706.03762 2010.11929 2103.00020 2103.14030
 
 # 从文件读取（每行一个论文标识）
-uv run python main.py batch-train --file papers.txt
+uv run python main.py batch-train --queries queries.txt
+
+# 从 JSONL 文件读取（跳过 API 解析，直接使用预加载内容）
+uv run python main.py batch-train --jsonl papers.jsonl
+# JSONL 格式：每行 {"id": "arxiv:1706.03762", "title": "...", "abstract": "..."}
 
 # 混用
-uv run python main.py batch-train 1706.03762 --file papers.txt
+uv run python main.py batch-train 1706.03762 --queries queries.txt
+uv run python main.py batch-train --queries queries.txt --jsonl papers.jsonl
 ```
 
 并行训练用多线程同时训练多篇论文，瓶颈在 LLM API 调用（I/O）。每 `compact_interval` 篇完成后自动触发一次图压缩，全部完成后执行最终压缩。
+
+| 参数 | 类型 | 说明 |
+|---|---|---|
+| `papers` | string[] | 论文标识列表（arXiv ID 或标题），命令行直接传入 |
+| `--queries` | string | 文件路径，每行一个论文标识（纯文本） |
+| `--jsonl` | string | JSONL 文件路径，每行一条 JSON 记录，跳过 OpenAlex/arXiv API 直接使用预加载内容 |
 
 输出 JSON 格式的结果摘要：
 ```json
