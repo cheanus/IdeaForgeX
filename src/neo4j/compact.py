@@ -77,19 +77,24 @@ def _find_similar_pairs(
     all_ids = {n["id"] for n in nodes}
     pairs: dict[tuple[str, str], float] = {}
 
+    label = "Inspiration" if "insp" in index_name else "Question"
+
     with client.session() as session:
         for node in nodes:
             params: dict[str, Any] = {
-                "index": index_name,
                 "k": topk,
                 "vector": node["vector"],
                 "threshold": threshold,
                 "my_id": node["id"],
             }
             if granularity is not None:
-                query = """
-                CALL db.index.vector.queryNodes($index, $k, $vector)
-                YIELD node AS neighbor, score
+                query = f"""
+                MATCH (neighbor:{label})
+                SEARCH neighbor IN (
+                    VECTOR INDEX {index_name}
+                    FOR $vector
+                    LIMIT $k
+                ) SCORE AS score
                 WHERE neighbor.id IN $all_ids
                   AND neighbor.id < $my_id
                   AND neighbor.粒度 = $granularity
@@ -99,9 +104,13 @@ def _find_similar_pairs(
                 params["granularity"] = granularity
                 params["all_ids"] = list(all_ids)
             else:
-                query = """
-                CALL db.index.vector.queryNodes($index, $k, $vector)
-                YIELD node AS neighbor, score
+                query = f"""
+                MATCH (neighbor:{label})
+                SEARCH neighbor IN (
+                    VECTOR INDEX {index_name}
+                    FOR $vector
+                    LIMIT $k
+                ) SCORE AS score
                 WHERE neighbor.id IN $all_ids
                   AND neighbor.id < $my_id
                   AND score >= $threshold
