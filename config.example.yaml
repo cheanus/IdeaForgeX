@@ -16,7 +16,7 @@ embedding_dim: 2560
 # ── 论文源 ──
 openalex_api_key: ""
 arxiv_api_url: "https://export.arxiv.org/api/query"
-short_abstract_threshold: 200  # 摘要低于此字符数时触发全文 PDF 降级（arXiv / OpenAlex 均适用）
+short_abstract_threshold: 50  # 摘要低于此字符数时触发全文 PDF 降级（arXiv / OpenAlex 均适用）
 
 # ── Neo4j ──
 neo4j_uri: "bolt://localhost:7688"
@@ -35,9 +35,9 @@ final_k: 15           # 最终返回的候选节点数
 
 # ── 并行训练与压缩 ──
 batch_concurrency: 4       # 并行训练最大线程数
-compact_interval: 10       # 每 N 篇完成触发 inline compact
-compact_threshold: 0.95    # 余弦相似度合并阈值
+compact_interval: 20       # 每 N 篇完成触发 inline compact
+compact_threshold: 0.85    # 余弦相似度合并阈值
 compact_topk: 5            # HNSW 近邻搜索 k
 
 # ── 日志 ──
-log_level: "INFO"  # DEBUG | INFO | WARNING | ERROR
+log_level: "WARNING"  # DEBUG | INFO | WARNING | ERROR
