@@ -62,23 +62,28 @@ builder.add_edge("commit_candidates", END)
 
 ### check_duplicate 去重
 
-利用 `Paper` 节点的 uniqueness constraint 实现原子预留，支持并发训练：
+`MATCH` 只读查询 Paper 节点是否存在，不写入数据。`commit_candidates` 节点负责通过 `MERGE` 创建 Paper 节点。
 
 ```python
 def check_duplicate(state):
     with neo4j_client.session() as session:
-        try:
-            session.run("CREATE (p:Paper {id: ...})", id=paper_node_id)
-            return {"already_trained": False}
-        except ConstraintError:
+        result = session.run(
+            "MATCH (p:Paper {id: $id}) RETURN p.trained_at",
+            id=paper_node_id,
+        )
+        if result.single():
             return {"already_trained": True}
+        return {"already_trained": False}
 ```
 
-`CREATE` 只能成功一次——第二个并发进程触发 `ConstraintError`，直接跳过。`commit_candidates` 中再 `MATCH + SET` 更新占位 Paper 为真实数据。
+这样的好处：
+
+- **断点续传**：Ctrl+C 中途打断时不产生任何脏数据（`check_duplicate` 无副作用），重启后正常重训
+- `commit_candidates` 的 `session.execute_write(_commit)` 是 Neo4j 原子事务，若进程断开，服务端自动回滚，重启后 MATCH 找不到 Paper 节点 → 重训
 
 ### commit_candidates 写入顺序
 
-1. 更新 Paper 节点（MATCH + SET，占位符已在 check_duplicate 创建）
+1. 创建/更新 Paper 节点（`MERGE ... SET`，首次执行创建，重复执行更新）
 2. 若 `node_updates`：batch_update + 创建 PAPER_CONTRIBUTES 边
 3. 创建新节点（Inspiration/Question）+ 边 + PAPER_CONTRIBUTES 边
 4. LLM 生成的节点 ID 加 paper_id 前缀防并发冲突

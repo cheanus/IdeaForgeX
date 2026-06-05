@@ -57,7 +57,7 @@ def _node_to_props(node: InspirationNode | QuestionNode) -> dict[str, Any]:
 def create_paper(tx, paper: PaperNode) -> None:
     tx.run(
         """
-        MATCH (p:Paper {id: $id})
+        MERGE (p:Paper {id: $id})
         SET p.title = $title, p.year = $year, p.abstract = $abstract, p.trained_at = $trained_at
         """,
         id=paper.id,
