@@ -90,10 +90,13 @@ uv run python main.py batch-train --queries queries.txt
 # 从 JSONL 文件读取（跳过 API 解析，直接使用预加载内容）
 uv run python main.py batch-train --jsonl papers.jsonl
 # JSONL 格式：每行一个 JSON 对象，支持以下字段：
-#   必填: "id" (arxiv:xxxx 或 openalex:Wxxxx), "title", "abstract"
+#   必填: "id"（唯一标识，任意字符串，支持 prefix:body 格式如 arxiv:xxxx
+#         或 openalex:Wxxxx；也可直接用自定义 ID 如 my-paper-001），
+#         "title", "abstract"
 #   可选: "year"
+#   id 用作论文的唯一键，重复提交自动跳过
 #   示例: {"id": "arxiv:1706.03762", "title": "Attention Is All You Need", "abstract": "...", "year": "2017"}
-# # 开头的行和空行自动跳过；传 - 则从 stdin 读取（支持 pipe）
+#   # 开头的行和空行自动跳过；传 - 则从 stdin 读取（支持 pipe）
 # OpenAlex dump 转 JSONL 见：scripts/openalex_to_jsonl.py
 
 # 混用
@@ -107,7 +110,7 @@ uv run python main.py batch-train --queries queries.txt --jsonl papers.jsonl
 |---|---|---|
 | `papers` | string[] | 论文标识列表（arXiv ID 或标题），命令行直接传入 |
 | `--queries` | string | 文件路径，每行一个论文标识（纯文本） |
-| `--jsonl` | string | JSONL 文件路径（或 `-` 表示 stdin），每行一条 JSON 记录，跳过 OpenAlex/arXiv API 直接使用预加载内容。必填字段：`id`（`arxiv:` 或 `openalex:` 前缀）、`title`、`abstract`；可选字段：`year`。以 `#` 开头的行和空行自动跳过 |
+| `--jsonl` | string | JSONL 文件路径（或 `-` 表示 stdin），每行一条 JSON 记录，跳过 OpenAlex/arXiv API 直接使用预加载内容。必填字段：`id`（自定义字符串，支持 `prefix:body` 格式，如 `arxiv:xxxx`/`openalex:Wxxxx`，也可直接用自定义 ID）、`title`、`abstract`；可选字段：`year`。`id` 用作论文唯一键，重复自动跳过。以 `#` 开头的行和空行自动跳过 |
 
 输出 JSON 格式的结果摘要：
 ```json
