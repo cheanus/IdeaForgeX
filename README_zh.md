@@ -87,18 +87,7 @@ uv run python main.py relate INSP_1 INSP_10
 
 CLI 使用指南见 [`docs/use_cli.md`](docs/use_cli.md)。完整 JSON schema 见 [`docs/superpowers/specs/2025-05-30-cli-spec.md`](docs/superpowers/specs/2025-05-30-cli-spec.md)。
 
-### 重置图
-
-```bash
-./scripts/neo4j-reset.sh test
-./scripts/neo4j-reset.sh personal
-```
-
-## 测试
-
-```bash
-uv run pytest -v
-```
+开发环境搭建、测试与图谱重置：[`docs/dev_setup.md`](docs/dev_setup.md)。
 
 ## 配置
 

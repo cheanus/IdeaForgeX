@@ -87,19 +87,7 @@ uv run python main.py relate INSP_1 INSP_10
 
 For CLI usage guide, see [`docs/use_cli.md`](docs/use_cli.md). For full JSON schemas, see [`docs/superpowers/specs/2025-05-30-cli-spec.md`](docs/superpowers/specs/2025-05-30-cli-spec.md).
 
-### Graph Reset
-
-```bash
-# Reset test or personal database
-./scripts/neo4j-reset.sh test
-./scripts/neo4j-reset.sh personal
-```
-
-## Testing
-
-```bash
-uv run pytest -v
-```
+Developer setup, testing, and graph reset instructions: [`docs/dev_setup.md`](docs/dev_setup.md).
 
 ## Configuration
 
