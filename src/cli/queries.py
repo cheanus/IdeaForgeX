@@ -9,6 +9,8 @@ import threading
 import time
 from typing import Any
 
+from tqdm import tqdm
+
 from src.config import Config
 from src.llm.client import ChatClient
 from src.neo4j.client import Neo4jClient
@@ -298,13 +300,8 @@ def _train_one_paper(
     """训练单篇论文（字符串查询），返回 {"status": "ok"} 或抛异常。"""
     from src.agent.training import build_training_graph, run_training
 
-    _logger.info("开始训练论文: %s", paper)
     graph = build_training_graph(config, llm_client, neo4j_client)
     result = run_training(graph, paper)
-    if result.get("already_trained"):
-        _logger.info("论文已存在于图库，跳过: %s", paper)
-    else:
-        _logger.info("论文训练完成: %s", paper)
     return {"status": "ok"}
 
 
@@ -320,13 +317,8 @@ def _train_one_record(
 
     pr = paper_from_record(record)
     paper_id = pr["paper_id"]
-    _logger.info("开始训练论文（预加载）: %s", paper_id)
     graph = build_training_graph(config, llm_client, neo4j_client)
     result = run_training_with_record(graph, paper_id, record)
-    if result.get("already_trained"):
-        _logger.info("论文已存在于图库，跳过: %s", paper_id)
-    else:
-        _logger.info("论文训练完成: %s", paper_id)
     return {"status": "ok"}
 
 
@@ -336,14 +328,12 @@ def cmd_batch_train(
     neo4j_client: Neo4jClient,
     papers: list[str],
     jsonl_records: list[dict[str, Any]] | None = None,
-    progress_callback=None,
 ) -> dict[str, Any]:
     """并行训练多篇论文，分批 compact。
 
     Args:
         papers: 论文标识列表（走 resolve_paper_spec 解析）
         jsonl_records: JSONL 预加载记录列表（跳过 API 解析）
-        progress_callback: 可选回调 (completed, total, paper, status)
     """
     from src.neo4j.compact import compact_all
 
@@ -365,50 +355,50 @@ def cmd_batch_train(
         interval = total
     batch_size = interval
 
-    for i in range(0, total, batch_size):
-        batch = tasks[i : i + batch_size]
-        _logger.info("开始训练第 %d-%d 批 (共 %d 篇)", i + 1, i + len(batch), total)
+    failed_count = 0
 
-        with concurrent.futures.ThreadPoolExecutor(
-            max_workers=config.batch_concurrency
-        ) as executor:
-            future_map = {}
-            for item in batch:
-                key, rec = item
-                if rec is not None:
-                    future = executor.submit(
-                        _train_one_record, config, llm_client, neo4j_client, rec
-                    )
-                else:
-                    future = executor.submit(
-                        _train_one_paper, config, llm_client, neo4j_client, key
-                    )
-                future_map[future] = key
+    with tqdm(total=total, desc="训练进度", unit="篇") as pbar:
+        for i in range(0, total, batch_size):
+            batch = tasks[i : i + batch_size]
+            pbar.set_description(f"训练进度（第 {i + 1}-{i + len(batch)} 批）")
 
-            for future in concurrent.futures.as_completed(future_map):
-                key = future_map[future]
-                try:
-                    future.result()
-                    with lock:
-                        succeeded.append(key)
-                    if progress_callback:
-                        progress_callback(
-                            len(succeeded) + len(failed), total, key, "ok"
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=config.batch_concurrency
+            ) as executor:
+                future_map = {}
+                for item in batch:
+                    key, rec = item
+                    if rec is not None:
+                        future = executor.submit(
+                            _train_one_record, config, llm_client, neo4j_client, rec
                         )
-                except Exception as e:
-                    _logger.error("论文 %s 训练失败: %s", key, e)
-                    with lock:
-                        failed.append({"论文": key, "错误": str(e)})
-                    if progress_callback:
-                        progress_callback(
-                            len(succeeded) + len(failed), total, key, "failed"
+                    else:
+                        future = executor.submit(
+                            _train_one_paper, config, llm_client, neo4j_client, key
                         )
+                    future_map[future] = key
 
-        completed_so_far = i + len(batch)
-        if completed_so_far < total:
-            _logger.info("批次完成，开始压缩知识图谱 …")
-            compact_report = compact_all(neo4j_client, config)
-            print(json.dumps(compact_report, ensure_ascii=False, indent=2))
+                for future in concurrent.futures.as_completed(future_map):
+                    key = future_map[future]
+                    try:
+                        future.result()
+                        with lock:
+                            succeeded.append(key)
+                        pbar.set_postfix_str(f"✓ {key[:40]}")
+                    except Exception as e:
+                        _logger.error("论文 %s 训练失败: %s", key, e)
+                        with lock:
+                            failed.append({"论文": key, "错误": str(e)})
+                            failed_count += 1
+                        pbar.set_postfix_str(f"✗ {key[:40]}")
+                    pbar.update(1)
+
+            completed_so_far = i + len(batch)
+            if completed_so_far < total:
+                _logger.info("批次完成，开始压缩知识图谱 …")
+                pbar.set_description("训练进度（压缩中）")
+                compact_report = compact_all(neo4j_client, config)
+                print(json.dumps(compact_report, ensure_ascii=False, indent=2))
 
     _logger.info("全部训练完成，执行最终压缩 …")
     final_report = compact_all(neo4j_client, config)

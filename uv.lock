@@ -482,6 +482,7 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "pymupdf" },
     { name = "pyyaml" },
+    { name = "tqdm" },
     { name = "typing-extensions" },
 ]
 
@@ -502,6 +503,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.0.0" },
     { name = "pymupdf", specifier = ">=1.24.0" },
     { name = "pyyaml", specifier = ">=6.0.0" },
+    { name = "tqdm", specifier = ">=4.67.3" },
     { name = "typing-extensions", specifier = ">=4.0.0" },
 ]
 
