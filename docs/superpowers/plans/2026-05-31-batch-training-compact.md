@@ -4,7 +4,7 @@
 
 **Goal:** 实现 batch-train 并行训练命令和 compact 图压缩命令，解决并行训练导致的语义重复节点问题。
 
-**Architecture:** 核心在 `src/neo4j/compact.py` 实现压缩算法，复用现有 HNSW 向量索引做近邻发现，自顶向下按粒度合并 Inspiration 节点（维持链约束），Question 节点纯相似度合并。`batch-train` 在 `src/cli/queries.py` 用批处理模式 + ThreadPoolExecutor 实现并行训练，每批完成后触发 compact。
+**Architecture:** 核心在 `src/neo4j/compact.py` 实现压缩算法，复用现有 HNSW 向量索引做近邻发现，自顶向下按粒度合并 Inspiration 节点（维持链约束），Question 节点纯相似度合并。`batch-train` 在 `src/cli/queries.py` 用统一 ThreadPoolExecutor + compact 内联触发实现并行训练。
 
 **Tech Stack:** Python threading, Neo4j HNSW vector index, UnionFind 并查集
 
@@ -850,76 +850,68 @@ def cmd_batch_train(
     llm_client: ChatClient,
     neo4j_client: Neo4jClient,
     papers: list[str],
-    progress_callback=None,
+    jsonl_records: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """并行训练多篇论文，分批 compact。
-
-    Args:
-        papers: 论文标识列表
-        progress_callback: 可选回调 (completed, total, paper, status)
-
-    Returns:
-        {"总论文数": N, "成功数": M, "失败数": F, "成功列表": [...], "失败列表": [...]}
-    """
+    """并行训练多篇论文，定期 compact。"""
     from src.neo4j.compact import compact_all
 
-    total = len(papers)
+    total = len(papers) + (len(jsonl_records) if jsonl_records else 0)
     succeeded: list[str] = []
+    skipped: list[str] = []
     failed: list[dict[str, str]] = []
     lock = threading.Lock()
 
     interval = config.compact_interval
-    batch_size = interval if interval > 0 else total
+    if interval <= 0:
+        interval = total
 
-    for i in range(0, total, batch_size):
-        batch = papers[i : i + batch_size]
-        _logger.info("开始训练第 %d-%d 批 (共 %d 篇)", i + 1, i + len(batch), total)
+    trained_since_compact = 0
 
-        with concurrent.futures.ThreadPoolExecutor(
+    with (
+        tqdm(total=total, desc="训练进度", unit="篇") as pbar,
+        concurrent.futures.ThreadPoolExecutor(
             max_workers=config.batch_concurrency
-        ) as executor:
-            future_map = {}
-            for paper in batch:
-                future = executor.submit(
-                    _train_one_paper, config, llm_client, neo4j_client, paper
-                )
-                future_map[future] = paper
+        ) as executor,
+    ):
+        # 统一提交所有任务
+        future_map = {}
+        for item in tasks:
+            key, rec = item
+            future = executor.submit(
+                _train_one_record if rec is not None else _train_one_paper,
+                ...
+            )
+            future_map[future] = key
 
-            for future in concurrent.futures.as_completed(future_map):
-                paper = future_map[future]
-                try:
-                    future.result()
-                    with lock:
-                        succeeded.append(paper)
-                    if progress_callback:
-                        progress_callback(len(succeeded) + len(failed), total, paper, "ok")
-                except Exception as e:
-                    _logger.error("论文 %s 训练失败: %s", paper, e)
-                    with lock:
-                        failed.append({"论文": paper, "错误": str(e)})
-                    if progress_callback:
-                        progress_callback(len(succeeded) + len(failed), total, paper, "failed")
+        for future in concurrent.futures.as_completed(future_map):
+            key = future_map[future]
+            try:
+                result = future.result()
+                if result.get("already_trained"):
+                    skipped.append(key)
+                else:
+                    succeeded.append(key)
+                    trained_since_compact += 1
+            except Exception as e:
+                failed.append({"论文": key, "错误": str(e)})
+            pbar.update(1)
 
-        # 批次完成，触发 compact
-        completed_so_far = i + len(batch)
-        if interval > 0 and completed_so_far < total:
-            _logger.info("批次完成，开始压缩知识图谱 …")
-            compact_report = compact_all(neo4j_client, config)
-            print(json.dumps(compact_report, ensure_ascii=False, indent=2))
+            # compact 在主线程内联触发
+            if trained_since_compact >= interval:
+                _logger.info("已完成 %d 篇新训练，开始压缩知识图谱 …", trained_since_compact)
+                compact_all(neo4j_client, config)
+                trained_since_compact = 0
 
-    # 最终 compact
     _logger.info("全部训练完成，执行最终压缩 …")
-    final_report = compact_all(neo4j_client, config)
-    print(json.dumps(final_report, ensure_ascii=False, indent=2))
+    compact_all(neo4j_client, config)
 
     result = {
         "总论文数": total,
         "成功数": len(succeeded),
+        "跳过数": len(skipped),
         "失败数": len(failed),
-        "成功列表": succeeded,
-        "失败列表": failed,
+        ...
     }
-    print(json.dumps(result, ensure_ascii=False, indent=2))
     return result
 ```
 

@@ -51,36 +51,33 @@ python main.py batch-train --queries papers.txt --jsonl papers.jsonl
 ```
 batch-train(papers):
     executor = ThreadPoolExecutor(max_workers=config.batch_concurrency)
-    completed = 0
-    running = queue of all papers
+    trained_since_compact = 0
+    submit all papers to executor
 
-    while running or executor has active futures:
-        if len(active_futures) < max_workers and running:
-            paper = running.pop()
-            submit train_one(paper)
+    for each completed future (as_completed):
+        if 训练成功 and 非跳过:
+            trained_since_compact += 1
         
-        wait for any future to complete
-        completed += 1
-        
-        if completed % config.compact_interval == 0:
-            wait_all_active_futures_to_complete()
-            compact_all(client, config)
-    
-    wait_all_futures()
+        if trained_since_compact >= config.compact_interval:
+            compact_all(client, config)      # 主线程阻塞，暂停结果处理
+            trained_since_compact = 0
+
     compact_all(client, config)  # 最终压缩
 ```
 
 ### 并发策略
 
+- 所有任务统一提交到 `ThreadPoolExecutor`，全局 `batch_concurrency` 并发
 - 每个 worker 线程运行一个完整的训练 `StateGraph`（`load_paper → ... → commit_candidates`）
 - 线程间通过 `ThreadPoolExecutor` 管理，不直接通信
-- compact 期间**暂停所有训练线程**：等当前进行中的训练全部完成后执行 compact，再恢复后续训练
+- compact 在主线程中同步执行：compact 期间 `as_completed` 暂停遍历，不处理新结果，但不主动等待进行中的训练（compact 与训练可交错，因 compact 不涉及正在提交的新数据，且 Neo4j 事务保证原子性）
 - 利用现有的 Neo4j 唯一性约束保证 Paper 级去重
 
 ### 进度与错误
 
-- 进度信息 `print()` 到 stdout：`[batch] 完成 5/20, 1 失败`
-- 单篇训练失败不中断 batch，记录到 `failed_papers` 列表
+- 进度信息通过 tqdm 显示，postfix 显示当前完成的论文状态：`✓` 成功、`=` 跳过、`✗` 失败
+- compact 期间 pbar description 切换为"压缩中"，完成后恢复
+- 单篇训练失败不中断，记录到 `failed_papers` 列表
 - 错误日志通过 logger 输出到 stderr
 
 ### 输出格式

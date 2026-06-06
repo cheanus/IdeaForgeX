@@ -381,7 +381,7 @@ def cmd_batch_train(
     papers: list[str],
     jsonl_records: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """并行训练多篇论文，分批 compact。
+    """并行训练多篇论文，定期 compact。
 
     Args:
         papers: 论文标识列表（走 resolve_paper_spec 解析）
@@ -397,7 +397,6 @@ def cmd_batch_train(
 
     interval = config.compact_interval
 
-    # 构建统一的任务列表: (paper_id_or_record, is_record)
     tasks: list[tuple[str, dict[str, Any] | None]] = []
     tasks.extend((p, None) for p in papers)
     if jsonl_records:
@@ -406,55 +405,49 @@ def cmd_batch_train(
 
     if interval <= 0:
         interval = total
-    batch_size = interval
 
-    failed_count = 0
     trained_since_compact = 0
 
-    with tqdm(total=total, desc="训练进度", unit="篇") as pbar:
-        for i in range(0, total, batch_size):
-            batch = tasks[i : i + batch_size]
-            pbar.set_description(f"训练进度（第 {i + 1}-{i + len(batch)} 批）")
+    with (
+        tqdm(total=total, desc="训练进度", unit="篇") as pbar,
+        concurrent.futures.ThreadPoolExecutor(
+            max_workers=config.batch_concurrency
+        ) as executor,
+    ):
+        future_map: dict[concurrent.futures.Future[Any], str] = {}
+        for item in tasks:
+            key, rec = item
+            if rec is not None:
+                future = executor.submit(
+                    _train_one_record, config, llm_client, neo4j_client, rec
+                )
+            else:
+                future = executor.submit(
+                    _train_one_paper, config, llm_client, neo4j_client, key
+                )
+            future_map[future] = key
 
-            with concurrent.futures.ThreadPoolExecutor(
-                max_workers=config.batch_concurrency
-            ) as executor:
-                future_map = {}
-                for item in batch:
-                    key, rec = item
-                    if rec is not None:
-                        future = executor.submit(
-                            _train_one_record, config, llm_client, neo4j_client, rec
-                        )
-                    else:
-                        future = executor.submit(
-                            _train_one_paper, config, llm_client, neo4j_client, key
-                        )
-                    future_map[future] = key
+        for future in concurrent.futures.as_completed(future_map):
+            key = future_map[future]
+            try:
+                result = future.result()
+                if result.get("already_trained"):
+                    with lock:
+                        skipped.append(key)
+                    pbar.set_postfix_str(f"= {key[:40]}")
+                else:
+                    with lock:
+                        succeeded.append(key)
+                        trained_since_compact += 1
+                    pbar.set_postfix_str(f"✓ {key[:40]}")
+            except Exception as e:
+                _logger.error("论文 %s 训练失败: %s", key, e)
+                with lock:
+                    failed.append({"论文": key, "错误": str(e)})
+                pbar.set_postfix_str(f"✗ {key[:40]}")
+            pbar.update(1)
 
-                for future in concurrent.futures.as_completed(future_map):
-                    key = future_map[future]
-                    try:
-                        result = future.result()
-                        if result.get("already_trained"):
-                            with lock:
-                                skipped.append(key)
-                            pbar.set_postfix_str(f"= {key[:40]}")
-                        else:
-                            with lock:
-                                succeeded.append(key)
-                                trained_since_compact += 1
-                            pbar.set_postfix_str(f"✓ {key[:40]}")
-                    except Exception as e:
-                        _logger.error("论文 %s 训练失败: %s", key, e)
-                        with lock:
-                            failed.append({"论文": key, "错误": str(e)})
-                            failed_count += 1
-                        pbar.set_postfix_str(f"✗ {key[:40]}")
-                    pbar.update(1)
-
-            remaining = total - (i + len(batch))
-            if trained_since_compact >= interval and remaining > 0:
+            if trained_since_compact >= interval:
                 _logger.info(
                     "已完成 %d 篇新训练，开始压缩知识图谱 …",
                     trained_since_compact,
@@ -462,6 +455,7 @@ def cmd_batch_train(
                 pbar.set_description("训练进度（压缩中）")
                 compact_report = compact_all(neo4j_client, config)
                 print(json.dumps(compact_report, ensure_ascii=False, indent=2))
+                pbar.set_description("训练进度")
                 trained_since_compact = 0
 
     _logger.info("全部训练完成，执行最终压缩 …")

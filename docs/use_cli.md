@@ -104,7 +104,7 @@ uv run python main.py batch-train 1706.03762 --queries queries.txt
 uv run python main.py batch-train --queries queries.txt --jsonl papers.jsonl
 ```
 
-并行训练用多线程同时训练多篇论文，瓶颈在 LLM API 调用（I/O）。每 `compact_interval` 篇完成后自动触发一次图压缩，全部完成后执行最终压缩。
+并行训练用多线程同时训练多篇论文，瓶颈在 LLM API 调用（I/O）。每 `compact_interval` 篇新训练完成后自动触发一次图压缩，全部完成后执行最终压缩。
 
 **断点续传**：`batch-train` 支持中断后重新运行同一命令。
 - 已完成的论文在 Neo4j 中有 Paper 节点，重启后自动跳过

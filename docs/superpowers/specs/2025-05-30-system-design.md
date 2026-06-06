@@ -114,7 +114,7 @@ load_paper → check_duplicate → {skip | generate_query → retrieve
 
 多个进程并发训练不同论文时，可能因并发窗口产生语义相近的重复节点（论文甲创建节点 A，论文乙在 A 提交前检索不到 A，独立创建相似节点 B）。
 
-`batch-train` 命令用 `ThreadPoolExecutor` 多线程并行训练，按 `compact_interval` 分批，每批完成后触发 inline compact。`compact` 命令也可独立运行。压缩算法：
+`batch-train` 命令用 `ThreadPoolExecutor` 多线程并行训练，每 `compact_interval` 篇新训练后触发 inline compact。`compact` 命令也可独立运行。压缩算法：
 
 - Inspiration 自顶向下（粒 1→2→3）合并，链约束确保细化链树结构不被破坏
 - Question 纯相似度合并

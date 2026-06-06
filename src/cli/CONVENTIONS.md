@@ -55,7 +55,7 @@ CLI 暴露知识图谱的查询层。生成创新点、多轮交互、论文发�
 
 `queries.py` 包含 `cmd_retrieve` / `cmd_inspect` / `cmd_random` / `cmd_relate` / `cmd_stats` / `cmd_batch_train` / `cmd_compact` 函数实现 + 输出格式化。
 
-`batch-train` 通过 `ThreadPoolExecutor` 多线程并行训练，`compact_interval` 控制批次大小和压缩频率。`compact` 调用 `src/neo4j/compact.py` 执行合并算法。
+`batch-train` 通过 `ThreadPoolExecutor` 多线程并行训练，`compact_interval` 控制压缩触发频率。`compact` 调用 `src/neo4j/compact.py` 执行合并算法。
 
 ## 实现约定
 
