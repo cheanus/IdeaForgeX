@@ -351,12 +351,11 @@ def _train_one_paper(
     neo4j_client: Neo4jClient,
     paper: str,
 ) -> dict[str, Any]:
-    """训练单篇论文（字符串查询），返回 {"status": "ok"} 或抛异常。"""
+    """训练单篇论文（字符串查询），返回 run_training 原始结果。"""
     from src.agent.training import build_training_graph, run_training
 
     graph = build_training_graph(config, llm_client, neo4j_client)
-    result = run_training(graph, paper)
-    return {"status": "ok"}
+    return run_training(graph, paper)
 
 
 def _train_one_record(
@@ -365,15 +364,14 @@ def _train_one_record(
     neo4j_client: Neo4jClient,
     record: dict[str, Any],
 ) -> dict[str, Any]:
-    """训练单篇论文（预加载 JSONL 记录），跳过 API 解析。"""
+    """训练单篇论文（预加载 JSONL 记录），返回 run_training 原始结果。"""
     from src.agent.training import build_training_graph, run_training_with_record
     from src.paper.resolver import paper_from_record
 
     pr = paper_from_record(record)
     paper_id = pr["paper_id"]
     graph = build_training_graph(config, llm_client, neo4j_client)
-    result = run_training_with_record(graph, paper_id, record)
-    return {"status": "ok"}
+    return run_training_with_record(graph, paper_id, record)
 
 
 def cmd_batch_train(
@@ -393,6 +391,7 @@ def cmd_batch_train(
 
     total = len(papers) + (len(jsonl_records) if jsonl_records else 0)
     succeeded: list[str] = []
+    skipped: list[str] = []
     failed: list[dict[str, str]] = []
     lock = threading.Lock()
 
@@ -436,11 +435,16 @@ def cmd_batch_train(
                 for future in concurrent.futures.as_completed(future_map):
                     key = future_map[future]
                     try:
-                        future.result()
-                        with lock:
-                            succeeded.append(key)
-                            trained_since_compact += 1
-                        pbar.set_postfix_str(f"✓ {key[:40]}")
+                        result = future.result()
+                        if result.get("already_trained"):
+                            with lock:
+                                skipped.append(key)
+                            pbar.set_postfix_str(f"= {key[:40]}")
+                        else:
+                            with lock:
+                                succeeded.append(key)
+                                trained_since_compact += 1
+                            pbar.set_postfix_str(f"✓ {key[:40]}")
                     except Exception as e:
                         _logger.error("论文 %s 训练失败: %s", key, e)
                         with lock:
@@ -467,8 +471,10 @@ def cmd_batch_train(
     result = {
         "总论文数": total,
         "成功数": len(succeeded),
+        "跳过数": len(skipped),
         "失败数": len(failed),
         "成功列表": succeeded,
+        "跳过列表": skipped,
         "失败列表": failed,
     }
     print(json.dumps(result, ensure_ascii=False, indent=2))
