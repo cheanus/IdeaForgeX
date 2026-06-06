@@ -407,15 +407,17 @@ def cmd_batch_train(
         interval = total
 
     trained_since_compact = 0
+    concurrency = max(config.batch_concurrency, 1)
 
     with (
         tqdm(total=total, desc="训练进度", unit="篇") as pbar,
-        concurrent.futures.ThreadPoolExecutor(
-            max_workers=config.batch_concurrency
-        ) as executor,
+        concurrent.futures.ThreadPoolExecutor(max_workers=concurrency) as executor,
     ):
         future_map: dict[concurrent.futures.Future[Any], str] = {}
-        for item in tasks:
+
+        def _submit(
+            item: tuple[str, dict[str, Any] | None],
+        ) -> concurrent.futures.Future[Any]:
             key, rec = item
             if rec is not None:
                 future = executor.submit(
@@ -426,6 +428,7 @@ def cmd_batch_train(
                     _train_one_paper, config, llm_client, neo4j_client, key
                 )
             future_map[future] = key
+            return future
 
         def _process_result(future: concurrent.futures.Future[Any]) -> None:
             nonlocal trained_since_compact
@@ -448,20 +451,28 @@ def cmd_batch_train(
                 pbar.set_postfix_str(f"✗ {key[:40]}")
             pbar.update(1)
 
-        pending = set(future_map.keys())
+        pending_queue = list(tasks)
+        running: set[concurrent.futures.Future[Any]] = set()
 
-        while pending:
-            done, pending = concurrent.futures.wait(
-                pending, return_when=concurrent.futures.FIRST_COMPLETED
+        for _ in range(min(concurrency, len(pending_queue))):
+            running.add(_submit(pending_queue.pop(0)))
+
+        while running:
+            done, running = concurrent.futures.wait(
+                running, return_when=concurrent.futures.FIRST_COMPLETED
             )
             for future in done:
                 _process_result(future)
 
-            if trained_since_compact >= interval and pending:
+            while len(running) < concurrency and pending_queue:
+                running.add(_submit(pending_queue.pop(0)))
+
+            if trained_since_compact >= interval:
                 pbar.set_description("训练进度（等待进行中训练完成）")
-                drained, pending = concurrent.futures.wait(pending)
-                for future in drained:
-                    _process_result(future)
+                if running:
+                    drained, running = concurrent.futures.wait(running)
+                    for future in drained:
+                        _process_result(future)
 
                 _logger.info(
                     "已完成 %d 篇新训练，开始压缩知识图谱 …",
@@ -472,6 +483,9 @@ def cmd_batch_train(
                 print(json.dumps(compact_report, ensure_ascii=False, indent=2))
                 pbar.set_description("训练进度")
                 trained_since_compact = 0
+
+                while len(running) < concurrency and pending_queue:
+                    running.add(_submit(pending_queue.pop(0)))
 
     _logger.info("全部训练完成，执行最终压缩 …")
     final_report = compact_all(neo4j_client, config)
