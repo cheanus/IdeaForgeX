@@ -113,8 +113,8 @@ python main.py compact --dry-run    # 仅报告，不执行
 
 ```
 compact_all(client, config):
-    compact_inspirations(client, config.compact_threshold, config.compact_topk)
-    compact_questions(client, config.compact_threshold, config.compact_topk)
+    compact_inspirations(client, config.compact_threshold)
+    compact_questions(client, config.compact_threshold)
     deduplicate_edges(client)
 ```
 
@@ -128,7 +128,7 @@ compact_inspirations(client, threshold, topk):
         # 1. 获取该粒度所有节点
         nodes = MATCH (n:Inspiration) WHERE n.粒度 = granularity RETURN n
         
-        # 2. HNSW 近邻搜索，找出相似候选对
+        # 2. numpy 批量余弦相似度，找出相似候选对
         pairs = []
         for node in nodes:
             neighbors = db.index.vector.queryNodes('idx_insp_vector', node.向量, k=topk)
@@ -229,7 +229,6 @@ compact 输出 JSON 报告到 stdout：
 | `batch_concurrency` | int | 4 | batch-train 最大并发线程数 |
 | `compact_interval` | int | 10 | batch-train 内每 N 篇完成触发 inline compact |
 | `compact_threshold` | float | 0.95 | 余弦相似度阈值，高于此值的节点对进入合并候选 |
-| `compact_topk` | int | 5 | HNSW 近邻搜索的 k 值 |
 
 ## 模块划分
 
@@ -259,7 +258,6 @@ def compact_all(client: Neo4jClient, config: Config) -> CompactReport: ...
 | compact 时无相似节点 | 空报告，正常退出 |
 | 被合并节点同时被训练线程引用 | compact 期间暂停训练，不存在此问题 |
 | 合并后产生自环边 | `merge_node_group` 中过滤 survivor→survivor 的边 |
-| HNSW 索引不存在 | compact 先调用 `bootstrap_hnsw` 幂等创建 |
 
 ## 测试要点
 
