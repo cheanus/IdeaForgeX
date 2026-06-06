@@ -48,7 +48,6 @@ class Config(BaseSettings):
     batch_concurrency: int = Field(default=4)
     compact_interval: int = Field(default=10)
     compact_threshold: float = Field(default=0.95)
-    compact_topk: int = Field(default=5)
     short_abstract_threshold: int = Field(default=200)
     log_level: str = Field(default="INFO")
 

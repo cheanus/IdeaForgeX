@@ -16,6 +16,7 @@ dependencies = [
     "typing-extensions>=4.0.0",
     "openalex-official>=0.3.3",
     "tqdm>=4.67.3",
+    "numpy>=2.4.6",
 ]
 
 [dependency-groups]

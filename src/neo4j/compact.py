@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import numpy as np
+
 from src.config import Config
 from src.neo4j.client import Neo4jClient
 
@@ -57,114 +59,80 @@ def _fetch_inspiration_nodes(
         return [{"id": r["id"], "vector": r["vector"]} for r in result]
 
 
-def _find_similar_pairs(
-    client: Neo4jClient,
-    nodes: list[dict[str, Any]],
-    index_name: str,
-    threshold: float,
-    topk: int,
-    granularity: int | None = None,
+def _compute_similar_pairs(
+    nodes: list[dict[str, Any]], threshold: float
 ) -> list[tuple[str, str, float]]:
-    """对节点列表通过 HNSW 向量索引查找相似对。
+    """用 numpy 批量计算节点间的余弦相似度，返回 score >= threshold 的对。
 
-    返回 [(id_a, id_b, score), ...]，score >= threshold。
-    使用 `id_a < id_b` 避免重复对。
+    返回 [(id_a, id_b, score), ...]，id_a < id_b。
     """
-    from src.neo4j.schema import ensure_schema
+    if len(nodes) < 2:
+        return []
 
-    ensure_schema(client)
+    ids = [n["id"] for n in nodes]
+    vectors = np.array([n["vector"] for n in nodes], dtype=np.float64)
 
-    all_ids = {n["id"] for n in nodes}
-    pairs: dict[tuple[str, str], float] = {}
+    norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+    norms = np.where(norms == 0, 1e-12, norms)
+    normalized = vectors / norms
+    similarity = normalized @ normalized.T
 
-    label = "Inspiration" if "insp" in index_name else "Question"
+    rows, cols = np.triu_indices(len(nodes), k=1)
+    triu_scores = similarity[rows, cols]
 
-    with client.session() as session:
-        for node in nodes:
-            params: dict[str, Any] = {
-                "k": topk,
-                "vector": node["vector"],
-                "threshold": threshold,
-                "my_id": node["id"],
-            }
-            if granularity is not None:
-                query = f"""
-                MATCH (neighbor:{label})
-                SEARCH neighbor IN (
-                    VECTOR INDEX {index_name}
-                    FOR $vector
-                    LIMIT $k
-                ) SCORE AS score
-                WHERE neighbor.id IN $all_ids
-                  AND neighbor.id < $my_id
-                  AND neighbor.粒度 = $granularity
-                  AND score >= $threshold
-                RETURN neighbor.id AS other_id, score
-                """
-                params["granularity"] = granularity
-                params["all_ids"] = list(all_ids)
-            else:
-                query = f"""
-                MATCH (neighbor:{label})
-                SEARCH neighbor IN (
-                    VECTOR INDEX {index_name}
-                    FOR $vector
-                    LIMIT $k
-                ) SCORE AS score
-                WHERE neighbor.id IN $all_ids
-                  AND neighbor.id < $my_id
-                  AND score >= $threshold
-                RETURN neighbor.id AS other_id, score
-                """
-                params["all_ids"] = list(all_ids)
+    mask = triu_scores >= threshold
+    rows, cols, scores = rows[mask], cols[mask], triu_scores[mask]
 
-            records = session.run(query, **params)
-            for record in records:
-                key = (node["id"], record["other_id"])
-                pairs[key] = record["score"]
-
-    return [(a, b, s) for (a, b), s in pairs.items()]
+    return [(ids[r], ids[c], float(s)) for r, c, s in zip(rows, cols, scores)]
 
 
-def _get_insp_refines_parent(client: Neo4jClient, node_id: str) -> str | None:
-    """获取 Inspiration 节点的 INSP_REFINES 上游父节点 ID。"""
-    with client.session() as session:
-        record = session.run(
-            """
-            MATCH (parent:Inspiration)-[:INSP_REFINES]->(child:Inspiration {id: $id})
-            RETURN parent.id AS parent_id
-            """,
-            id=node_id,
-        ).single()
-        return record["parent_id"] if record else None
-
-
-def _pick_survivor(client: Neo4jClient, node_ids: set[str]) -> str:
-    """在合并组中选出存活节点。优先级：子节点多 > 贡献论文多 > 核心描述长 > ID 小。"""
-    node_list = list(node_ids)
-    if len(node_list) == 1:
-        return node_list[0]
-
+def _load_insp_refines_map(client: Neo4jClient) -> dict[str, str]:
+    """一次性加载所有 INSP_REFINES 关系，返回 {child_id: parent_id}。"""
+    refines_map: dict[str, str] = {}
     with client.session() as session:
         result = session.run(
-            """
-            UNWIND $ids AS nid
-            MATCH (n {id: nid})
-            OPTIONAL MATCH (n)-[:INSP_REFINES]->(child:Inspiration)
-            OPTIONAL MATCH (paper:Paper)-[:PAPER_CONTRIBUTES]->(n)
-            RETURN n.id AS id,
-                   count(DISTINCT child) AS child_count,
-                   count(DISTINCT paper) AS paper_count,
-                   size(COALESCE(n.核心描述, '')) AS desc_len
-            ORDER BY child_count DESC, paper_count DESC, desc_len DESC, id ASC
-            LIMIT 1
-            """,
-            ids=node_list,
+            "MATCH (parent:Inspiration)-[:INSP_REFINES]->(child:Inspiration) "
+            "RETURN child.id AS child_id, parent.id AS parent_id"
         )
-        record = result.single()
-        if record:
-            return record["id"]
-        return node_list[0]
+        for record in result:
+            refines_map[record["child_id"]] = record["parent_id"]
+    return refines_map
+
+
+def _pick_all_survivors(client: Neo4jClient, groups: list[list[str]]) -> dict[int, str]:
+    """批量选出所有合并组的存活节点。
+
+    每组一条 CALL 子查询，优先级：子节点多 > 贡献论文多 > 核心描述长 > ID 小。
+    返回 {group_index: survivor_id}。
+    """
+    if not groups:
+        return {}
+
+    survivors: dict[int, str] = {}
+    with client.session() as session:
+        for i, group in enumerate(groups):
+            if len(group) == 1:
+                survivors[i] = group[0]
+                continue
+            result = session.run(
+                """
+                UNWIND $ids AS nid
+                MATCH (n {id: nid})
+                OPTIONAL MATCH (n)-[:INSP_REFINES]->(child:Inspiration)
+                OPTIONAL MATCH (paper:Paper)-[:PAPER_CONTRIBUTES]->(n)
+                WITH n.id AS id,
+                     count(DISTINCT child) AS child_count,
+                     count(DISTINCT paper) AS paper_count,
+                     size(COALESCE(n.核心描述, '')) AS desc_len
+                ORDER BY child_count DESC, paper_count DESC, desc_len DESC, id ASC
+                LIMIT 1
+                RETURN id AS survivor_id
+                """,
+                ids=group,
+            )
+            record = result.single()
+            survivors[i] = record["survivor_id"] if record else group[0]
+    return survivors
 
 
 def _merge_node_group(
@@ -182,7 +150,6 @@ def _merge_node_group(
 
         def _merge_tx(tx) -> None:
             for victim_id in victim_ids:
-                # 1. 获取被合并节点的所有边
                 edges = tx.run(
                     """
                     MATCH (victim {id: $victim_id})-[r]-(neighbor)
@@ -196,7 +163,6 @@ def _merge_node_group(
                     victim_id=victim_id,
                 ).data()
 
-                # 2. 转移边到 survivor
                 REL_TYPES = {
                     "INSP_REFINES",
                     "INSP_COMBINES",
@@ -206,7 +172,7 @@ def _merge_node_group(
                 }
                 for edge in edges:
                     if edge["neighbor_id"] == survivor_id:
-                        continue  # 跳过自环
+                        continue
                     rel_type = edge["rel_type"]
                     if rel_type not in REL_TYPES:
                         continue
@@ -234,7 +200,6 @@ def _merge_node_group(
                             weight=weight,
                         )
 
-                # 3. 合并可变属性（保留更长的值）
                 tx.run(
                     """
                     MATCH (victim {id: $victim_id})
@@ -260,7 +225,6 @@ def _merge_node_group(
                     survivor_id=survivor_id,
                 )
 
-                # 4. 删除冗余节点
                 tx.run(
                     "MATCH (n {id: $victim_id}) DETACH DELETE n",
                     victim_id=victim_id,
@@ -269,9 +233,20 @@ def _merge_node_group(
         session.execute_write(_merge_tx)
 
 
-def compact_inspirations(
-    client: Neo4jClient, threshold: float, topk: int
-) -> dict[str, int]:
+def _build_groups_from_pairs(
+    nodes: list[dict[str, Any]], pairs: list[tuple[str, str, float]]
+) -> list[list[str]]:
+    """从节点列表和相似对构建合并组。返回 [member_ids, ...]。"""
+    if not pairs:
+        return []
+    all_ids = {n["id"] for n in nodes}
+    uf = UnionFind(all_ids)
+    for a_id, b_id, _ in pairs:
+        uf.union(a_id, b_id)
+    return [list(s) for s in uf.get_groups()]
+
+
+def compact_inspirations(client: Neo4jClient, threshold: float) -> dict[str, int]:
     """自顶向下（粒 1→2→3）合并语义相近的 Inspiration 节点。
 
     粒度 >1 的合并需满足：上游 INSP_REFINES 父节点也在同一合并组。
@@ -280,16 +255,16 @@ def compact_inspirations(
     report: dict[str, int] = {"总量": 0, "粒1": 0, "粒2": 0, "粒3": 0}
     parent_groups: dict[int, dict[str, int]] = {}
 
+    # 预加载所有 INSP_REFINES 关系
+    refines_map = _load_insp_refines_map(client)
+
     for granularity in [1, 2, 3]:
         nodes = _fetch_inspiration_nodes(client, granularity)
         if not nodes:
             continue
 
-        pairs = _find_similar_pairs(
-            client, nodes, "idx_insp_vector", threshold, topk, granularity=granularity
-        )
+        pairs = _compute_similar_pairs(nodes, threshold)
         if not pairs:
-            # 即使没有合并对，仍需记录本层映射供下层使用
             parent_groups[granularity] = {n["id"]: i for i, n in enumerate(nodes)}
             continue
 
@@ -298,8 +273,8 @@ def compact_inspirations(
             prev_groups = parent_groups.get(granularity - 1, {})
 
             def _same_parent_group(a_id: str, b_id: str) -> bool:
-                pa = _get_insp_refines_parent(client, a_id)
-                pb = _get_insp_refines_parent(client, b_id)
+                pa = refines_map.get(a_id)
+                pb = refines_map.get(b_id)
                 if pa is None and pb is None:
                     return True
                 if pa is None or pb is None:
@@ -310,24 +285,19 @@ def compact_inspirations(
 
             pairs = [(a, b, s) for (a, b, s) in pairs if _same_parent_group(a, b)]
 
-        # 并查集构建合并组
-        all_ids = {n["id"] for n in nodes}
-        uf = UnionFind(all_ids)
-        for a_id, b_id, _ in pairs:
-            uf.union(a_id, b_id)
-
-        groups = uf.get_groups()
+        groups = _build_groups_from_pairs(nodes, pairs)
 
         # 记录本层的合并组映射（供下一层链约束使用）
         parent_groups[granularity] = {}
-        for gid, member_set in enumerate(groups):
-            for node_id in member_set:
+        for gid, member_list in enumerate(groups):
+            for node_id in member_list:
                 parent_groups[granularity][node_id] = gid
 
-        # 执行合并
-        for member_set in groups:
-            survivor = _pick_survivor(client, member_set)
-            victims = [nid for nid in member_set if nid != survivor]
+        # 批量选出存活节点并执行合并
+        survivors = _pick_all_survivors(client, groups)
+        for gid, member_list in enumerate(groups):
+            survivor = survivors.get(gid, member_list[0])
+            victims = [nid for nid in member_list if nid != survivor]
             _merge_node_group(client, survivor, victims)
             count = len(victims)
             report["粒" + str(granularity)] += count
@@ -336,9 +306,7 @@ def compact_inspirations(
     return report
 
 
-def compact_questions(
-    client: Neo4jClient, threshold: float, topk: int
-) -> dict[str, int]:
+def compact_questions(client: Neo4jClient, threshold: float) -> dict[str, int]:
     """合并语义相近的 Question 节点（无链约束）。"""
     with client.session() as session:
         result = session.run("MATCH (n:Question) RETURN n.id AS id, n.向量 AS vector")
@@ -347,20 +315,16 @@ def compact_questions(
     if not nodes:
         return {"总量": 0}
 
-    pairs = _find_similar_pairs(client, nodes, "idx_q_vector", threshold, topk)
+    pairs = _compute_similar_pairs(nodes, threshold)
     if not pairs:
         return {"总量": 0}
 
-    all_ids = {n["id"] for n in nodes}
-    uf = UnionFind(all_ids)
-    for a_id, b_id, _ in pairs:
-        uf.union(a_id, b_id)
-
-    groups = uf.get_groups()
+    groups = _build_groups_from_pairs(nodes, pairs)
+    survivors = _pick_all_survivors(client, groups)
     total_merged = 0
-    for member_set in groups:
-        survivor = _pick_survivor(client, member_set)
-        victims = [nid for nid in member_set if nid != survivor]
+    for gid, member_list in enumerate(groups):
+        survivor = survivors.get(gid, member_list[0])
+        victims = [nid for nid in member_list if nid != survivor]
         _merge_node_group(client, survivor, victims)
         total_merged += len(victims)
 
@@ -387,9 +351,7 @@ def _deduplicate_edges(client: Neo4jClient) -> int:
 def compact_all(client: Neo4jClient, config: Config) -> dict[str, Any]:
     """完整压缩入口：Inspiration → Question → 边去重。"""
     _logger.info("开始压缩 Inspiration 节点 …")
-    insp_report = compact_inspirations(
-        client, config.compact_threshold, config.compact_topk
-    )
+    insp_report = compact_inspirations(client, config.compact_threshold)
     _logger.info(
         "Inspiration 压缩完成，共合并 %d 个节点（粒1=%d, 粒2=%d, 粒3=%d）",
         insp_report["总量"],
@@ -399,7 +361,7 @@ def compact_all(client: Neo4jClient, config: Config) -> dict[str, Any]:
     )
 
     _logger.info("开始压缩 Question 节点 …")
-    q_report = compact_questions(client, config.compact_threshold, config.compact_topk)
+    q_report = compact_questions(client, config.compact_threshold)
     _logger.info("Question 压缩完成，共合并 %d 个节点", q_report["总量"])
 
     _logger.info("开始去重重复边 …")
@@ -417,45 +379,34 @@ def compact_all(client: Neo4jClient, config: Config) -> dict[str, Any]:
 def compact_dry_run(client: Neo4jClient, config: Config) -> dict[str, Any]:
     """不实际执行，仅报告将会合并的节点数量和组数。"""
     threshold = config.compact_threshold
-    topk = config.compact_topk
-    insp_groups = 0
-    insp_merged = 0
-    q_groups = 0
-    q_merged = 0
 
+    report_item = {"total": 0, "groups": 0}
+
+    insp_item = {"total": 0, "groups": 0}
     for granularity in [1, 2, 3]:
         nodes = _fetch_inspiration_nodes(client, granularity)
         if not nodes:
             continue
-        pairs = _find_similar_pairs(
-            client, nodes, "idx_insp_vector", threshold, topk, granularity=granularity
-        )
-        if not pairs:
-            continue
-        all_ids = {n["id"] for n in nodes}
-        uf = UnionFind(all_ids)
-        for a_id, b_id, _ in pairs:
-            uf.union(a_id, b_id)
-        groups = uf.get_groups()
-        insp_groups += len(groups)
-        insp_merged += sum(len(g) - 1 for g in groups)
+        pairs = _compute_similar_pairs(nodes, threshold)
+        groups = _build_groups_from_pairs(nodes, pairs)
+        insp_item["groups"] += len(groups)
+        insp_item["total"] += sum(len(g) - 1 for g in groups)
 
+    q_item = {"total": 0, "groups": 0}
     with client.session() as session:
         result = session.run("MATCH (n:Question) RETURN n.id AS id, n.向量 AS vector")
         nodes = [{"id": r["id"], "vector": r["vector"]} for r in result]
     if nodes:
-        pairs = _find_similar_pairs(client, nodes, "idx_q_vector", threshold, topk)
-        if pairs:
-            all_ids = {n["id"] for n in nodes}
-            uf = UnionFind(all_ids)
-            for a_id, b_id, _ in pairs:
-                uf.union(a_id, b_id)
-            groups = uf.get_groups()
-            q_groups = len(groups)
-            q_merged = sum(len(g) - 1 for g in groups)
+        pairs = _compute_similar_pairs(nodes, threshold)
+        groups = _build_groups_from_pairs(nodes, pairs)
+        q_item["groups"] = len(groups)
+        q_item["total"] = sum(len(g) - 1 for g in groups)
 
     return {
-        "merged_inspirations": {"总量": insp_merged, "组数": insp_groups},
-        "merged_questions": {"总量": q_merged, "组数": q_groups},
+        "merged_inspirations": {
+            "总量": insp_item["total"],
+            "组数": insp_item["groups"],
+        },
+        "merged_questions": {"总量": q_item["total"], "组数": q_item["groups"]},
         "dry_run": True,
     }
