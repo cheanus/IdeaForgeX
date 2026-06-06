@@ -410,6 +410,7 @@ def cmd_batch_train(
     batch_size = interval
 
     failed_count = 0
+    trained_since_compact = 0
 
     with tqdm(total=total, desc="训练进度", unit="篇") as pbar:
         for i in range(0, total, batch_size):
@@ -438,6 +439,7 @@ def cmd_batch_train(
                         future.result()
                         with lock:
                             succeeded.append(key)
+                            trained_since_compact += 1
                         pbar.set_postfix_str(f"✓ {key[:40]}")
                     except Exception as e:
                         _logger.error("论文 %s 训练失败: %s", key, e)
@@ -447,12 +449,16 @@ def cmd_batch_train(
                         pbar.set_postfix_str(f"✗ {key[:40]}")
                     pbar.update(1)
 
-            completed_so_far = i + len(batch)
-            if completed_so_far < total:
-                _logger.info("批次完成，开始压缩知识图谱 …")
+            remaining = total - (i + len(batch))
+            if trained_since_compact >= interval and remaining > 0:
+                _logger.info(
+                    "已完成 %d 篇新训练，开始压缩知识图谱 …",
+                    trained_since_compact,
+                )
                 pbar.set_description("训练进度（压缩中）")
                 compact_report = compact_all(neo4j_client, config)
                 print(json.dumps(compact_report, ensure_ascii=False, indent=2))
+                trained_since_compact = 0
 
     _logger.info("全部训练完成，执行最终压缩 …")
     final_report = compact_all(neo4j_client, config)
