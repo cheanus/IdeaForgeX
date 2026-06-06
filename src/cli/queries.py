@@ -291,6 +291,60 @@ def cmd_compact(
     return compact_all(neo4j_client, config)
 
 
+def cmd_stats(neo4j_client: Neo4jClient) -> dict[str, Any]:
+    """返回知识图谱统计概览：节点数、粒度分布、问题类型、边分布、论文年份。"""
+    with neo4j_client.session() as session:
+        insp_total = session.run(  # type: ignore[arg-type]
+            "MATCH (n:Inspiration) RETURN count(n) AS c"
+        ).single()["c"]
+        q_total = session.run(  # type: ignore[arg-type]
+            "MATCH (n:Question) RETURN count(n) AS c"
+        ).single()["c"]
+        paper_total = session.run(  # type: ignore[arg-type]
+            "MATCH (n:Paper) RETURN count(n) AS c"
+        ).single()["c"]
+
+        granularity: dict[str, int] = {}
+        for g in [1, 2, 3]:
+            granularity[f"粒{g}"] = session.run(  # type: ignore[arg-type]
+                "MATCH (n:Inspiration) WHERE n.粒度 = $g RETURN count(n) AS c",
+                g=g,
+            ).single()["c"]
+
+        question_types: dict[str, int] = {}
+        result = session.run(  # type: ignore[arg-type]
+            "MATCH (n:Question) RETURN n.问题类型 AS qt, count(n) AS c ORDER BY c DESC"
+        )
+        for record in result:
+            question_types[record["qt"]] = record["c"]
+
+        edge_counts: dict[str, int] = {}
+        result = session.run(  # type: ignore[arg-type]
+            "MATCH ()-[r]->() RETURN type(r) AS t, count(r) AS c ORDER BY c DESC"
+        )
+        for record in result:
+            edge_counts[record["t"]] = record["c"]
+
+        paper_years: dict[str, int] = {}
+        result = session.run(  # type: ignore[arg-type]
+            "MATCH (n:Paper) WHERE n.year IS NOT NULL RETURN n.year AS year, count(n) AS c ORDER BY year"
+        )
+        for record in result:
+            paper_years[record["year"]] = record["c"]
+
+    return {
+        "nodes": {
+            "inspiration_total": insp_total,
+            "question_total": q_total,
+            "paper_total": paper_total,
+        },
+        "inspiration_granularity": granularity,
+        "question_types": question_types,
+        "edges": edge_counts,
+        "paper_years": paper_years,
+    }
+
+
 def _train_one_paper(
     config: Config,
     llm_client: ChatClient,

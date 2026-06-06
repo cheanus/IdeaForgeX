@@ -242,7 +242,11 @@ def main() -> None:
             _json_print(result)
             return
         if args.command == "stats":
-            _logger.info("stats 功能待接入")
+            from src.cli.queries import cmd_stats
+
+            result = cmd_stats(neo4j_client)
+            _json_print(result)
+            return
     finally:
         neo4j_client.close()
 
