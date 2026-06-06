@@ -427,7 +427,8 @@ def cmd_batch_train(
                 )
             future_map[future] = key
 
-        for future in concurrent.futures.as_completed(future_map):
+        def _process_result(future: concurrent.futures.Future[Any]) -> None:
+            nonlocal trained_since_compact
             key = future_map[future]
             try:
                 result = future.result()
@@ -447,7 +448,21 @@ def cmd_batch_train(
                 pbar.set_postfix_str(f"✗ {key[:40]}")
             pbar.update(1)
 
-            if trained_since_compact >= interval:
+        pending = set(future_map.keys())
+
+        while pending:
+            done, pending = concurrent.futures.wait(
+                pending, return_when=concurrent.futures.FIRST_COMPLETED
+            )
+            for future in done:
+                _process_result(future)
+
+            if trained_since_compact >= interval and pending:
+                pbar.set_description("训练进度（等待进行中训练完成）")
+                drained, pending = concurrent.futures.wait(pending)
+                for future in drained:
+                    _process_result(future)
+
                 _logger.info(
                     "已完成 %d 篇新训练，开始压缩知识图谱 …",
                     trained_since_compact,
