@@ -68,7 +68,7 @@ def _get_edges_for_node(client: Neo4jClient, node_id: str) -> list[dict[str, Any
     RETURN type(r) AS rel_type, r.weight AS weight, m AS target, labels(m)[0] AS target_type
     ORDER BY weight DESC
     """
-    with client.session() as session:
+    with client.read_session() as session:
         result = session.run(query, node_id=node_id)
         return [
             {
@@ -87,7 +87,7 @@ def _get_papers_for_node(client: Neo4jClient, node_id: str) -> list[dict[str, An
     MATCH (p:Paper)-[:PAPER_CONTRIBUTES]->(n {id: $node_id})
     RETURN p.id AS id, p.title AS title, p.year AS year
     """
-    with client.session() as session:
+    with client.read_session() as session:
         records = session.run(query, node_id=node_id)
         return [
             {"id": record["id"], "title": record["title"], "year": record["year"]}
@@ -163,7 +163,7 @@ def cmd_inspect(
     results: list[dict[str, Any]] = []
 
     for node_id in node_ids:
-        with neo4j_client.session() as session:
+        with neo4j_client.read_session() as session:
             record = session.run(
                 "MATCH (n {id: $node_id}) RETURN n, labels(n)[0] AS node_type",
                 node_id=node_id,
@@ -295,7 +295,7 @@ def cmd_compact(
 
 def cmd_stats(neo4j_client: Neo4jClient) -> dict[str, Any]:
     """返回知识图谱统计概览：节点数、粒度分布、问题类型、边分布、论文年份。"""
-    with neo4j_client.session() as session:
+    with neo4j_client.read_session() as session:
         insp_total = session.run(  # type: ignore[arg-type]
             "MATCH (n:Inspiration) RETURN count(n) AS c"
         ).single()["c"]

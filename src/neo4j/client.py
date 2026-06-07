@@ -5,7 +5,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import dataclass
 
-from neo4j import GraphDatabase
+from neo4j import GraphDatabase, READ_ACCESS
 
 from src.config import Config
 
@@ -25,6 +25,13 @@ class Neo4jClient:
     @contextmanager
     def session(self):
         with self.driver.session(database=self.config.neo4j_database) as session:
+            yield session
+
+    @contextmanager
+    def read_session(self):
+        with self.driver.session(
+            database=self.config.neo4j_database, default_access_mode=READ_ACCESS
+        ) as session:
             yield session
 
     def close(self) -> None:

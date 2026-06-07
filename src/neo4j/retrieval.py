@@ -17,8 +17,14 @@ class RetrievalHit:
 
 
 def _vector_query_cypher(index_name: str, cypher_version: int = 5) -> str:
+    if "insp" in index_name:
+        props = ".id, .粒度, .核心描述, .前提条件, .操作步骤"
+        label = "Inspiration"
+    else:
+        props = ".id, .核心描述, .问题类型, .当前现状, .未解决部分"
+        label = "Question"
+
     if cypher_version >= 25:
-        label = "Inspiration" if "insp" in index_name else "Question"
         return f"""
             MATCH (node:{label})
             SEARCH node IN (
@@ -26,13 +32,13 @@ def _vector_query_cypher(index_name: str, cypher_version: int = 5) -> str:
                 FOR $embedding
                 LIMIT $k
             ) SCORE AS score
-            RETURN node, labels(node)[0] AS node_type, score
+            RETURN node {{{props}}}, labels(node)[0] AS node_type, score
             ORDER BY score DESC
         """
     return f"""
         CALL db.index.vector.queryNodes('{index_name}', $k, $embedding)
         YIELD node, score
-        RETURN node, labels(node)[0] AS node_type, score
+        RETURN node {{{props}}}, labels(node)[0] AS node_type, score
         ORDER BY score DESC
     """
 
@@ -44,7 +50,7 @@ def vector_search(
     k: int,
     cypher_version: int = 5,
 ) -> list[RetrievalHit]:
-    with client.session() as session:
+    with client.read_session() as session:
         result = session.run(
             _vector_query_cypher(index_name, cypher_version),  # type: ignore[reportArgumentType]
             k=k,
@@ -69,7 +75,7 @@ def expand_refinement_chain(client: Neo4jClient, hit_id: str) -> list[dict[str, 
     }
     RETURN DISTINCT finer, labels(finer)[0] AS node_type
     """
-    with client.session() as session:
+    with client.read_session() as session:
         result = session.run(query, hit_id=hit_id)
         return [
             dict(record["finer"]) | {"type": record.get("node_type", "")}
@@ -94,7 +100,7 @@ def batch_expand_refinement_chain(
     }
     RETURN DISTINCT finer, labels(finer)[0] AS node_type, src_id
     """
-    with client.session() as session:
+    with client.read_session() as session:
         result = session.run(query, hit_ids=hit_ids)
         groups: dict[str, list[dict[str, Any]]] = {}
         for record in result:
@@ -115,7 +121,7 @@ def hop_expand(
     ORDER BY weight DESC
     LIMIT $max_neighbors
     """
-    with client.session() as session:
+    with client.read_session() as session:
         result = session.run(query, node_id=node_id, max_neighbors=max_neighbors)
         return [
             {
@@ -205,7 +211,7 @@ def random_nodes(
             "MATCH (n) WHERE labels(n)[0] IN ['Inspiration', 'Question'] "
             "RETURN n, labels(n)[0] AS type ORDER BY rand() LIMIT $count"
         )
-        with client.session() as session:
+        with client.read_session() as session:
             result = session.run(query, count=count)
             nodes = []
             for record in result:
@@ -257,7 +263,7 @@ def find_shortest_path(
     无路径时返回 {"connected": false}，自指时返回 hops=0。
     """
     if from_id == to_id:
-        with client.session() as session:
+        with client.read_session() as session:
             record = session.run(
                 "MATCH (n {id: $node_id}) RETURN n, labels(n)[0] AS type",
                 node_id=from_id,
@@ -283,7 +289,7 @@ def find_shortest_path(
            [rel IN relationships(path) | {{type: type(rel), weight: rel.weight}}] AS edges,
            length(path) AS hops
     """
-    with client.session() as session:
+    with client.read_session() as session:
         record = session.run(query, from_id=from_id, to_id=to_id).single()  # type: ignore[reportArgumentType]
 
     if record is None:

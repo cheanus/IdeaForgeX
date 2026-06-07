@@ -92,12 +92,13 @@ def _make_fake_neo4j_session(single_result: dict | None, node_type: str = ""):
 
 
 def _make_fake_neo4j_client_ctx(session):
-    """构建兼容 'with client.session() as session:' 的 mock client。"""
+    """构建兼容 'with client.read_session() as session:' 的 mock client。"""
 
     def _session_ctx():
         return MagicMock(__enter__=lambda s: session, __exit__=lambda *a: None)
 
-    return _session_ctx
+    ctx = _session_ctx
+    return SimpleNamespace(session=ctx, read_session=ctx)
 
 
 def test_cmd_retrieve_format(monkeypatch):
@@ -153,7 +154,7 @@ def test_cmd_retrieve_format(monkeypatch):
 def test_cmd_inspect_inspiration_node(monkeypatch):
     """验证 inspect 对 Inspiration 节点输出全字段。"""
     session = _make_fake_neo4j_session(FAKE_INSP_NODE, "Inspiration")
-    fake_neo4j = SimpleNamespace(session=_make_fake_neo4j_client_ctx(session))
+    fake_neo4j = _make_fake_neo4j_client_ctx(session)
 
     monkeypatch.setattr(
         "src.cli.queries._build_chain",
@@ -189,7 +190,7 @@ def test_cmd_inspect_inspiration_node(monkeypatch):
 def test_cmd_inspect_question_node(monkeypatch):
     """验证 inspect 对 Question 节点输出全字段。"""
     session = _make_fake_neo4j_session(FAKE_QUESTION_NODE, "Question")
-    fake_neo4j = SimpleNamespace(session=_make_fake_neo4j_client_ctx(session))
+    fake_neo4j = _make_fake_neo4j_client_ctx(session)
 
     monkeypatch.setattr("src.cli.queries._get_edges_for_node", lambda c, nid: [])
     monkeypatch.setattr("src.cli.queries._build_chain", lambda node, client: [])
@@ -214,7 +215,7 @@ def test_cmd_inspect_question_node(monkeypatch):
 def test_cmd_inspect_edges_expanded(monkeypatch):
     """验证 inspect 展开边时 target 为 mini-inspect 格式。"""
     session = _make_fake_neo4j_session(FAKE_INSP_NODE, "Inspiration")
-    fake_neo4j = SimpleNamespace(session=_make_fake_neo4j_client_ctx(session))
+    fake_neo4j = _make_fake_neo4j_client_ctx(session)
 
     monkeypatch.setattr(
         "src.cli.queries._get_edges_for_node",
@@ -252,7 +253,7 @@ def test_cmd_inspect_edges_expanded(monkeypatch):
 def test_cmd_inspect_missing_node(monkeypatch):
     """验证 inspect 查询不存在的节点时返回 error。"""
     session = _make_fake_neo4j_session(None)
-    fake_neo4j = SimpleNamespace(session=_make_fake_neo4j_client_ctx(session))
+    fake_neo4j = _make_fake_neo4j_client_ctx(session)
 
     monkeypatch.setattr("src.cli.queries._get_edges_for_node", lambda c, nid: [])
     monkeypatch.setattr("src.cli.queries._build_chain", lambda node, client: [])
@@ -274,7 +275,7 @@ def test_cmd_inspect_comma_separated_ids(monkeypatch):
         s = next(sessions)
         return MagicMock(__enter__=lambda _: s, __exit__=lambda *a: None)
 
-    fake_neo4j = SimpleNamespace(session=_session_ctx)
+    fake_neo4j = SimpleNamespace(session=_session_ctx, read_session=_session_ctx)
 
     def fake_build_chain(node, client):
         if node.get("type") == "Inspiration":
