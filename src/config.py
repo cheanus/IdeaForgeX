@@ -50,6 +50,7 @@ class Config(BaseSettings):
     compact_threshold: float = Field(default=0.95)
     short_abstract_threshold: int = Field(default=200)
     log_level: str = Field(default="INFO")
+    cypher_version: int = Field(default=5)
     server_host: str = Field(default="0.0.0.0")
     server_port: int = Field(default=2048)
     server_root_path: str = Field(default="")

@@ -245,7 +245,9 @@ def cmd_random(
     if query_text:
         query_embedding = llm_client.embed([query_text])[0]
 
-    nodes = random_nodes(neo4j_client, count, query_embedding)
+    nodes = random_nodes(
+        neo4j_client, count, query_embedding, cypher_version=config.cypher_version
+    )
 
     runtime_ms = int((time.monotonic() - t0) * 1000)
 

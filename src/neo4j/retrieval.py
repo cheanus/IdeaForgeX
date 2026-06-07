@@ -16,26 +16,37 @@ class RetrievalHit:
     score: float
 
 
-def _vector_query_cypher(index_name: str) -> str:
-    label = "Inspiration" if "insp" in index_name else "Question"
+def _vector_query_cypher(index_name: str, cypher_version: int = 5) -> str:
+    if cypher_version >= 25:
+        label = "Inspiration" if "insp" in index_name else "Question"
+        return f"""
+            MATCH (node:{label})
+            SEARCH node IN (
+                VECTOR INDEX {index_name}
+                FOR $embedding
+                LIMIT $k
+            ) SCORE AS score
+            RETURN node, labels(node)[0] AS node_type, score
+            ORDER BY score DESC
+        """
     return f"""
-        MATCH (node:{label})
-        SEARCH node IN (
-            VECTOR INDEX {index_name}
-            FOR $embedding
-            LIMIT $k
-        ) SCORE AS score
+        CALL db.index.vector.queryNodes('{index_name}', $k, $embedding)
+        YIELD node, score
         RETURN node, labels(node)[0] AS node_type, score
         ORDER BY score DESC
     """
 
 
 def vector_search(
-    client: Neo4jClient, index_name: str, query_embedding: list[float], k: int
+    client: Neo4jClient,
+    index_name: str,
+    query_embedding: list[float],
+    k: int,
+    cypher_version: int = 5,
 ) -> list[RetrievalHit]:
     with client.session() as session:
         result = session.run(
-            _vector_query_cypher(index_name),  # type: ignore[reportArgumentType]
+            _vector_query_cypher(index_name, cypher_version),  # type: ignore[reportArgumentType]
             k=k,
             embedding=query_embedding,
         )
@@ -91,8 +102,13 @@ def retrieve_with_traversal(
     client: Neo4jClient, query_embedding: list[float], config: Config
 ) -> list[dict[str, Any]]:
     hits: list[dict[str, Any]] = []
-    vectors = vector_search(client, "idx_insp_vector", query_embedding, config.k_hits)
-    vectors += vector_search(client, "idx_q_vector", query_embedding, config.k_hits)
+    cv = config.cypher_version
+    vectors = vector_search(
+        client, "idx_insp_vector", query_embedding, config.k_hits, cypher_version=cv
+    )
+    vectors += vector_search(
+        client, "idx_q_vector", query_embedding, config.k_hits, cypher_version=cv
+    )
     candidates: dict[str, dict[str, Any]] = {}
 
     for hit in vectors:
@@ -138,6 +154,7 @@ def random_nodes(
     count: int,
     query_embedding: list[float] | None = None,
     pool_size: int = 50,
+    cypher_version: int = 5,
 ) -> list[dict[str, Any]]:
     """从图中随机取 N 个节点。
 
@@ -167,7 +184,13 @@ def random_nodes(
 
     pool: dict[str, dict[str, Any]] = {}
     for index_name in ("idx_insp_vector", "idx_q_vector"):
-        for hit in vector_search(client, index_name, query_embedding, pool_size):
+        for hit in vector_search(
+            client,
+            index_name,
+            query_embedding,
+            pool_size,
+            cypher_version=cypher_version,
+        ):
             node = hit.node
             if node["id"] not in pool:
                 pool[node["id"]] = {

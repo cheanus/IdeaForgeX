@@ -318,7 +318,7 @@ def test_cmd_random_pure(monkeypatch):
 
     monkeypatch.setattr(
         "src.cli.queries.random_nodes",
-        lambda client, count, embedding=None: fake_nodes[:count],
+        lambda client, count, embedding=None, **kw: fake_nodes[:count],
     )
 
     result = cmd_random(
@@ -351,7 +351,7 @@ def test_cmd_random_weighted(monkeypatch):
 
     monkeypatch.setattr(
         "src.cli.queries.random_nodes",
-        lambda client, count, embedding=None: fake_nodes[:count],
+        lambda client, count, embedding=None, **kw: fake_nodes[:count],
     )
 
     result = cmd_random(

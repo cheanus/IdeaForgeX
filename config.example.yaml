@@ -40,6 +40,7 @@ compact_threshold: 0.85    # 余弦相似度合并阈值
 
 # ── 日志 ──
 log_level: "WARNING"  # DEBUG | INFO | WARNING | ERROR
+cypher_version: 5  # 5=db.index.vector.queryNodes 过程（兼容 Aura），25=SEARCH 子句（新特性）
 
 # ── 服务器 ──
 server_host: "0.0.0.0"
