@@ -24,19 +24,15 @@ Most paper-to-idea pipelines stop at summaries or require manual curation. IdeaF
 - 📄 **OpenAlex + arXiv** — tiered paper resolution with automatic fallback
 - ✅ **Full test suite** — `uv run pytest -v` covers training, retrieval, and CLI output
 
-## Project Structure
-
-| Directory | Purpose |
-|---|---|
-| `src/agent/` | LangGraph training workflow |
-| `src/llm/` | Prompt templates and chat/embedding client |
-| `src/paper/` | OpenAlex discovery, arXiv PDF extraction, paper resolver |
-| `src/neo4j/` | Schema bootstrap, retrieval traversal, graph maintenance |
-| `src/cli/` | CLI query commands (`retrieve` / `inspect` / `random` / `relate`) |
-| `tests/` | Regression coverage for training, CLI, config, and LLM client |
-| `docs/` | Design, architecture, data model, CLI usage guide |
-
 ## Quick Start
+
+### Zero Setup
+
+A read-only HTTP API is deployed at `https://ifx.caveallegory.cn/api/`. Give your AI agent this one-liner:
+
+> Install the ideaforgex-read (https://github.com/cheanus/IdeaForgeX/blob/main/skills/ideaforgex-read/SKILL.md) skill, set `API_ENDPOINT=https://ifx.caveallegory.cn/api/`, then help me explore novel research directions around **transformer attention mechanisms**.
+
+Replace the topic with your own — the agent will query the knowledge graph and brainstorm ideas for you.
 
 ### Prerequisites
 
@@ -112,10 +108,14 @@ All parameters live in `config.yaml` (see `config.example.yaml` for defaults). E
 
 This project is licensed under the GNU AGPLv3. See [`LICENSE`](LICENSE) for details.
 
+The hosted API at `https://ifx.caveallegory.cn/api/` serves data derived from OpenAlex under CC0, and is likewise made available under CC0.
+
+## Acknowledgments
+
+- [USTC Ciyuan Project](https://git.ustc.edu.cn/ustcnic/ai) — computing resources and infrastructure
+- [Neo4j Aura](https://neo4j.com/docs/aura/) — graph database platform
+- [OpenAlex](https://openalex.org/) — open scholarly data catalog
+
 ## Contributing
 
-Issues and pull requests are welcome. Before opening a PR:
-
-- `uv run pytest -v` must pass
-- `bootstrap`, `train`, `retrieve`, `inspect`, `random`, and `relate` should work locally
-- New behavior should be covered by tests
+See [`docs/dev_setup.md`](docs/dev_setup.md) for dev environment setup and contribution guidelines.

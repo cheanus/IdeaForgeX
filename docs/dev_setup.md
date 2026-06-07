@@ -32,6 +32,20 @@ uv run ifx bootstrap
 
 完整 CLI 使用指南见 [`docs/use_cli.md`](use_cli.md)。
 
+## 项目结构
+
+| 目录 | 职责 |
+|---|---|
+| `src/agent/` | LangGraph 训练工作流 |
+| `src/llm/` | prompt 模板与 chat/embedding 客户端 |
+| `src/paper/` | OpenAlex 发现、arXiv PDF 提取、论文解析 |
+| `src/neo4j/` | schema 初始化、检索遍历、图维护 |
+| `src/cli/` | CLI 查询命令 |
+| `src/server/` | FastAPI 只读 HTTP 服务 |
+| `skills/` | 外部 agent 技能定义 |
+| `tests/` | 回归测试 |
+| `docs/` | 设计与使用文档 |
+
 ## 运行测试
 
 ```bash

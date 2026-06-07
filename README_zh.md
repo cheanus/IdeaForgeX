@@ -24,19 +24,15 @@
 - 📄 **OpenAlex + arXiv** — 分层论文解析，自动回退
 - ✅ **完整回归测试** — `uv run pytest -v` 覆盖训练、检索、CLI 输出
 
-## 项目结构
-
-| 目录 | 职责 |
-|---|---|
-| `src/agent/` | LangGraph 训练工作流 |
-| `src/llm/` | prompt 模板与 chat/embedding 客户端 |
-| `src/paper/` | OpenAlex 发现、arXiv PDF 提取、论文解析 |
-| `src/neo4j/` | schema 初始化、检索遍历、图维护 |
-| `src/cli/` | CLI 查询命令（`retrieve` / `inspect` / `random` / `relate`） |
-| `tests/` | 训练、CLI、配置、LLM 客户端的回归覆盖 |
-| `docs/` | 设计、架构、数据模型、CLI 使用指南 |
-
 ## 快速开始
+
+### 零配置使用
+
+只读 HTTP 服务部署在 `https://ifx.caveallegory.cn/api/`。把这句话发给你的 AI agent：
+
+> 安装技能 ideaforgex-read (https://github.com/cheanus/IdeaForgeX/blob/main/skills/ideaforgex-read/SKILL.md)，设置 `API_ENDPOINT=https://ifx.caveallegory.cn/api/`，然后帮我调研 **transformer 注意力机制**的创新方向。
+
+把研究课题换成你自己的，agent 会自动查询知识图谱并为你脑暴创新点。
 
 ### 环境要求
 
@@ -112,10 +108,14 @@ CLI 使用指南见 [`docs/use_cli.md`](docs/use_cli.md)。完整 JSON schema �
 
 本项目采用 GNU AGPLv3 许可。详见 [`LICENSE`](LICENSE)。
 
+托管服务 `https://ifx.caveallegory.cn/api/` 基于 OpenAlex 的 CC0 许可数据，同样以 CC0 许可开放。
+
+## 鸣谢
+
+- [中国科大词元计划](https://git.ustc.edu.cn/ustcnic/ai) — 算力与基础设施支持
+- [Neo4j Aura](https://neo4j.com/docs/aura/) — 图数据库平台
+- [OpenAlex](https://openalex.org/) — 开放学术数据目录
+
 ## 贡献
 
-欢迎提交 issue 与 PR。提交 PR 前请确保：
-
-- `uv run pytest -v` 通过
-- `bootstrap`、`train`、`retrieve`、`inspect`、`random`、`relate` 在本地可运行
-- 新行为应有测试覆盖
+开发环境搭建与贡献指南见 [`docs/dev_setup.md`](docs/dev_setup.md)。
