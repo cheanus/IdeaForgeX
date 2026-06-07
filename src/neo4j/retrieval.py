@@ -145,7 +145,10 @@ def random_nodes(
     无则全图均匀随机。
     """
     if query_embedding is None:
-        query = "MATCH (n) RETURN n, labels(n)[0] AS type ORDER BY rand() LIMIT $count"
+        query = (
+            "MATCH (n) WHERE labels(n)[0] IN ['Inspiration', 'Question'] "
+            "RETURN n, labels(n)[0] AS type ORDER BY rand() LIMIT $count"
+        )
         with client.session() as session:
             result = session.run(query, count=count)
             nodes = []
