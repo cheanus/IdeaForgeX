@@ -1,26 +1,34 @@
-# 从 neo4j 容器中导出数据
-打开浏览器访问 http://localhost:7475，登录 Neo4j 浏览器界面。
+# 从 neo4j 容器中迁移数据
 
-在左侧输入框中输入以下 Cypher 查询，导出所有节点和关系：
+## 导出数据
 
-```cypher
-CALL apoc.export.csv.all("neo4j_export.csv", {
-  format: "plain",
-  quotes: "always",
-  useTypes: true
-});
-```
-
-执行后会在 Neo4j 容器的 `/var/lib/neo4j/import` 目录下生成 `neo4j_export.csv` 文件。你可以使用以下命令将其复制到主机：
+使用新容器挂载卷来导出数据：
 
 ```bash
-docker cp ideaforgex-neo4j-personal:/var/lib/neo4j/import/neo4j_export.csv ./neo4j_export.csv
+docker run --rm \ 
+  -v ideaforgex_neo4j_personal_data:/data \
+  -v /tmp:/tmp \     
+  neo4j:community \
+  neo4j-admin database dump neo4j \
+  --to-path=/tmp
 ```
 
-这样就得到了包含所有节点和关系的 CSV 文件，可以使用 Excel、Pandas 等工具进行分析和处理，也可以导入到另一个 Neo4j 实例中进行查询和可视化。
+这会将数据库导出为 `/tmp/neo4j.dump`，你可以在主机的 `/tmp` 目录下找到它。
 
-之后可以删除容器中的导出文件：
+## 上传数据到 Aura
 
+将数据复制到容器内
 ```bash
-docker exec ideaforgex-neo4j-personal rm /var/lib/neo4j/import/neo4j_export.csv
+docker cp /tmp/neo4j.dump ideaforgex-neo4j-personal:/var/lib/neo4j/import/
+```
+
+进入容器
+```bash
+docker exec -it ideaforgex-neo4j-personal bash
+```
+
+上传数据至 Aura
+```bash
+bin/neo4j-admin database upload neo4j --from-path=/var/lib/neo4j/import/ --to-uri=neo4j+s://c800d2a5.databases.neo4j.io --overwrite-destination=true
+rm /var/lib/neo4j/import/neo4j.dump
 ```
