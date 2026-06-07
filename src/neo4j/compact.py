@@ -135,12 +135,21 @@ def _pick_all_survivors(client: Neo4jClient, groups: list[list[str]]) -> dict[in
     return survivors
 
 
+_REL_TYPES = {
+    "INSP_REFINES",
+    "INSP_COMBINES",
+    "INSP_QUESTION",
+    "PAPER_CONTRIBUTES",
+    "QUESTION_COMBINES",
+}
+
+
 def _merge_node_group(
     client: Neo4jClient, survivor_id: str, victim_ids: list[str]
 ) -> None:
     """将一个合并组中的冗余节点合并到存活节点。
 
-    操作：转移所有边 → 合并可变属性 → 删除冗余节点。
+    操作：批量读取所有 victim 边 → 转移边 → 合并属性 → 删除冗余节点。
     允许产生重复边，由后续 deduplicate_edges 清理。
     """
     if not victim_ids:
@@ -149,57 +158,59 @@ def _merge_node_group(
     with client.driver.session(database=client.config.neo4j_database) as session:
 
         def _merge_tx(tx) -> None:
+            # ── 批量读取所有 victim 的边 ──
+            all_edges = tx.run(
+                """
+                UNWIND $victim_ids AS victim_id
+                MATCH (victim {id: victim_id})-[r]-(neighbor)
+                WHERE type(r) IN ['INSP_REFINES','INSP_COMBINES','INSP_QUESTION','PAPER_CONTRIBUTES','QUESTION_COMBINES']
+                RETURN type(r) AS rel_type,
+                       r.weight AS weight,
+                       startNode(r).id AS from_id,
+                       endNode(r).id AS to_id,
+                       victim.id AS victim_id,
+                       neighbor.id AS neighbor_id
+                """,
+                victim_ids=victim_ids,
+            ).data()
+
+            for edge in all_edges:
+                victim_id = edge["victim_id"]
+                neighbor_id = edge["neighbor_id"]
+                if neighbor_id == survivor_id:
+                    continue
+                rel_type = edge["rel_type"]
+                if rel_type not in _REL_TYPES:
+                    _logger.warning(
+                        "compact 边转移遇到未知关系类型: %s，跳过", rel_type
+                    )
+                    continue
+                weight = edge["weight"]
+                if edge["from_id"] == victim_id:
+                    tx.run(
+                        f"""
+                        MATCH (s {{id: $survivor_id}})
+                        MATCH (n {{id: $neighbor_id}})
+                        CREATE (s)-[:`{rel_type}` {{weight: $weight}}]->(n)
+                        """,
+                        survivor_id=survivor_id,
+                        neighbor_id=neighbor_id,
+                        weight=weight,
+                    )
+                else:
+                    tx.run(
+                        f"""
+                        MATCH (n {{id: $neighbor_id}})
+                        MATCH (s {{id: $survivor_id}})
+                        CREATE (n)-[:`{rel_type}` {{weight: $weight}}]->(s)
+                        """,
+                        neighbor_id=neighbor_id,
+                        survivor_id=survivor_id,
+                        weight=weight,
+                    )
+
+            # ── 批量合并属性 + 删除 victim ──
             for victim_id in victim_ids:
-                edges = tx.run(
-                    """
-                    MATCH (victim {id: $victim_id})-[r]-(neighbor)
-                    WHERE type(r) IN ['INSP_REFINES','INSP_COMBINES','INSP_QUESTION','PAPER_CONTRIBUTES','QUESTION_COMBINES']
-                    RETURN type(r) AS rel_type,
-                           r.weight AS weight,
-                           startNode(r).id AS from_id,
-                           endNode(r).id AS to_id,
-                           neighbor.id AS neighbor_id
-                    """,
-                    victim_id=victim_id,
-                ).data()
-
-                REL_TYPES = {
-                    "INSP_REFINES",
-                    "INSP_COMBINES",
-                    "INSP_QUESTION",
-                    "PAPER_CONTRIBUTES",
-                    "QUESTION_COMBINES",
-                }
-                for edge in edges:
-                    if edge["neighbor_id"] == survivor_id:
-                        continue
-                    rel_type = edge["rel_type"]
-                    if rel_type not in REL_TYPES:
-                        continue
-                    weight = edge["weight"]
-                    if edge["from_id"] == victim_id:
-                        tx.run(
-                            f"""
-                            MATCH (s {{id: $survivor_id}})
-                            MATCH (n {{id: $neighbor_id}})
-                            CREATE (s)-[:`{rel_type}` {{weight: $weight}}]->(n)
-                            """,
-                            survivor_id=survivor_id,
-                            neighbor_id=edge["neighbor_id"],
-                            weight=weight,
-                        )
-                    else:
-                        tx.run(
-                            f"""
-                            MATCH (n {{id: $neighbor_id}})
-                            MATCH (s {{id: $survivor_id}})
-                            CREATE (n)-[:`{rel_type}` {{weight: $weight}}]->(s)
-                            """,
-                            neighbor_id=edge["neighbor_id"],
-                            survivor_id=survivor_id,
-                            weight=weight,
-                        )
-
                 tx.run(
                     """
                     MATCH (victim {id: $victim_id})
@@ -224,7 +235,6 @@ def _merge_node_group(
                     victim_id=victim_id,
                     survivor_id=survivor_id,
                 )
-
                 tx.run(
                     "MATCH (n {id: $victim_id}) DETACH DELETE n",
                     victim_id=victim_id,

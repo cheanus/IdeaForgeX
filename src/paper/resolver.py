@@ -233,23 +233,9 @@ def build_practice_summary(client: Neo4jClient, limit: int = 12) -> str:
     with client.session() as session:
 
         def _extract_node(record: Any) -> dict[str, Any]:
-            if hasattr(record, "data"):
-                data = record.data()
-                if isinstance(data, dict):
-                    node = data.get("n", data)
-                    if isinstance(node, dict):
-                        return node
-                    if hasattr(node, "data"):
-                        inner = node.data()
-                        return inner if isinstance(inner, dict) else {}
-            if isinstance(record, dict):
-                node = record.get("n", record)
-                if isinstance(node, dict):
-                    return node
-                if hasattr(node, "data"):
-                    inner = node.data()
-                    return inner if isinstance(inner, dict) else {}
-            return {}
+            data = record.data()
+            node = data.get("n", data)
+            return node if isinstance(node, dict) else {}
 
         inspiration_result = session.run(
             """
@@ -310,65 +296,3 @@ def paper_from_record(record: dict[str, Any]) -> PaperRecord:
         "year": str(record.get("year", "")),
         "paper": record,
     }
-    """汇总当前实践库，供 LLM A 判断。"""
-
-    def _records(result: Any) -> list[Any]:
-        if result is None:
-            return []
-        return list(result)
-
-    with client.session() as session:
-
-        def _extract_node(record: Any) -> dict[str, Any]:
-            if hasattr(record, "data"):
-                data = record.data()
-                if isinstance(data, dict):
-                    node = data.get("n", data)
-                    if isinstance(node, dict):
-                        return node
-                    if hasattr(node, "data"):
-                        inner = node.data()
-                        return inner if isinstance(inner, dict) else {}
-            if isinstance(record, dict):
-                node = record.get("n", record)
-                if isinstance(node, dict):
-                    return node
-                if hasattr(node, "data"):
-                    inner = node.data()
-                    return inner if isinstance(inner, dict) else {}
-            return {}
-
-        inspiration_result = session.run(
-            """
-            MATCH (n:Inspiration)
-            RETURN n
-            LIMIT $limit
-            """,
-            limit=limit,
-        )
-        question_result = session.run(
-            """
-            MATCH (n:Question)
-            RETURN n
-            LIMIT $limit
-            """,
-            limit=limit,
-        )
-
-        inspirations = [
-            f"{node.get('id', '')}: {node.get('核心描述') or node.get('core', '')} (粒度 {node.get('粒度', node.get('grain', 0))})"
-            for record in _records(inspiration_result)
-            for node in [_extract_node(record)]
-        ]
-        questions = [
-            f"{node.get('id', '')}: {node.get('核心描述') or node.get('core', '')} ({node.get('问题类型') or node.get('qtype', '理论缺口')})"
-            for record in _records(question_result)
-            for node in [_extract_node(record)]
-        ]
-
-    sections: list[str] = []
-    if inspirations:
-        sections.append("Inspiration:\n" + "\n".join(inspirations))
-    if questions:
-        sections.append("Question:\n" + "\n".join(questions))
-    return "\n\n".join(sections) or "暂无实践库节点"

@@ -374,6 +374,42 @@ def _train_one_record(
     return run_training_with_record(graph, paper_id, record)
 
 
+def _maybe_compact(
+    config: Config,
+    neo4j_client: Neo4jClient,
+    running: set[concurrent.futures.Future[Any]],
+    future_map: dict[concurrent.futures.Future[Any], str],
+    pending_queue: list,
+    concurrency: int,
+    trained_since_compact: int,
+    pbar: tqdm,
+    _process_result,
+    _submit,
+) -> tuple[set[concurrent.futures.Future[Any]], int]:
+    """触发图压缩：排空进行中任务 → 压缩 → 重置计数器 → 补发新任务。"""
+    from src.neo4j.compact import compact_all
+
+    pbar.set_description("训练进度（等待进行中训练完成）")
+    if running:
+        drained, running = concurrent.futures.wait(running)
+        for future in drained:
+            _process_result(future)
+
+    _logger.info(
+        "已完成 %d 篇新训练，开始压缩知识图谱 …",
+        trained_since_compact,
+    )
+    pbar.set_description("训练进度（压缩中）")
+    compact_report = compact_all(neo4j_client, config)
+    print(json.dumps(compact_report, ensure_ascii=False, indent=2))
+    pbar.set_description("训练进度")
+
+    while len(running) < concurrency and pending_queue:
+        running.add(_submit(pending_queue.pop(0)))
+
+    return running, 0
+
+
 def cmd_batch_train(
     config: Config,
     llm_client: ChatClient,
@@ -468,24 +504,18 @@ def cmd_batch_train(
                 running.add(_submit(pending_queue.pop(0)))
 
             if trained_since_compact >= interval:
-                pbar.set_description("训练进度（等待进行中训练完成）")
-                if running:
-                    drained, running = concurrent.futures.wait(running)
-                    for future in drained:
-                        _process_result(future)
-
-                _logger.info(
-                    "已完成 %d 篇新训练，开始压缩知识图谱 …",
+                running, trained_since_compact = _maybe_compact(
+                    config,
+                    neo4j_client,
+                    running,
+                    future_map,
+                    pending_queue,
+                    concurrency,
                     trained_since_compact,
+                    pbar,
+                    _process_result,
+                    _submit,
                 )
-                pbar.set_description("训练进度（压缩中）")
-                compact_report = compact_all(neo4j_client, config)
-                print(json.dumps(compact_report, ensure_ascii=False, indent=2))
-                pbar.set_description("训练进度")
-                trained_since_compact = 0
-
-                while len(running) < concurrency and pending_queue:
-                    running.add(_submit(pending_queue.pop(0)))
 
     _logger.info("全部训练完成，执行最终压缩 …")
     final_report = compact_all(neo4j_client, config)

@@ -24,6 +24,4 @@ def call_with_retry(
             return parser(payload) if parser is not None else payload
         except (json.JSONDecodeError, KeyError, ValueError, openai.APIError) as exc:
             last_error = exc
-    if last_error is not None:
-        raise last_error
-    raise RuntimeError("LLM 调用失败")
+    raise last_error or RuntimeError("LLM 调用失败")

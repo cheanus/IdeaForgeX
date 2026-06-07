@@ -97,27 +97,9 @@ def update_node(tx, update: NodeUpdate) -> None:
     tx.run(f"MATCH (n {{id: $node_id}}) SET {', '.join(set_clauses)}", **params)
 ```
 
-不可更新 `id`、`核心描述`。`已知实例` 由代码自动注入。
+不可更新 `id`、`核心描述`。
 
 在 `commit_candidates` 中，节点更新必须在节点新增之前执行。
-
-## 已知实例追加
-
-`已知实例` 不由 LLM 产出，由代码在 `commit_candidates` 中自动注入：
-
-```python
-def append_known_instance(tx, node_ids: list[str], entry: str) -> None:
-    for node_id in node_ids:
-        tx.run(
-            """
-            MATCH (n {id: $node_id})
-            WHERE n.已知实例 IS NULL OR NOT n.已知实例 CONTAINS $entry
-            SET n.已知实例 = coalesce(n.已知实例 + '; ', '') + $entry
-            """,
-            node_id=node_id,
-            entry=entry,
-        )
-```
 
 ## 边创建
 
