@@ -14,6 +14,8 @@
 | `inspect` | 查看某个节点的全部细节（精化链 + 关联边 + 贡献论文） |
 | `random` | 随机探索，打破检索排序的路径依赖 |
 | `relate` | 查找两个节点之间的最短路径 |
+| `stats` | 查看图谱规模统计（节点数、粒度分布、边类型等） |
+| `server` | 启动 FastAPI HTTP 只读服务，对外暴露查询接口 |
 | `delete-node` | 删除节点（含级联清理） |
 | `reset` | 清空图谱（不可逆） |
 
@@ -77,6 +79,50 @@ uv run ifx relate insp-abc123 insp-xyz789 --max-len 4
 ```
 
 查找两个节点之间的最短路径，返回中间节点序列和边序列。
+
+## 图谱统计
+
+```bash
+uv run ifx stats
+```
+
+输出 JSON 格式的统计概览：各类节点数、粒度分布、问题类型分布、边类型分布、论文年份分布。
+
+## HTTP 只读服务
+
+```bash
+# 启动服务（默认 0.0.0.0:2048）
+uv run ifx server
+
+# 自定义地址和端口
+uv run ifx server --host 127.0.0.1 --port 3000
+```
+
+启动后访问 `http://host:port/docs` 查看交互式 API 文档。
+
+### 暴露的端点
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/` | 健康检查 |
+| `POST` | `/retrieve` | 图检索，JSON body 传参 |
+| `GET` | `/inspect/{ids}` | 节点详情（支持逗号分隔多个 ID），`?expand_edges=false` 跳过边展开 |
+| `GET` | `/stats` | 图谱统计 |
+| `GET` | `/random?count=5&query=xxx` | 随机探索，`query` 可选 |
+| `GET` | `/relate/{from_id}/{to_id}?max_len=6` | 最短路径查询 |
+
+所有端点参数与 CLI 同名命令一致。不暴露任何写操作（train、batch-train、delete-node、compact、bootstrap、reset）。CORS 默认允许所有来源，可通过 `config.yaml` 中 `server_cors_origins` 限制。
+
+### 配置
+
+```yaml
+# config.yaml
+server_host: "0.0.0.0"       # 绑定地址
+server_port: 2048            # 监听端口
+server_cors_origins: ["*"]   # CORS 允许来源
+```
+
+启动时通过 `--host` / `--port` 命令行参数可覆盖配置文件中的值。
 
 ## 并行训练
 

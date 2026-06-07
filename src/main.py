@@ -20,6 +20,7 @@ from src.config import load_config
 from src.llm.client import ChatClient
 from src.neo4j.client import create_client
 from src.neo4j.schema import ensure_schema, reset_practice_graph
+from src.server.app import create_app
 
 _logger = logging.getLogger("ideaforgex")
 
@@ -105,6 +106,21 @@ def build_parser() -> argparse.ArgumentParser:
         dest="compact_dry_run",
         help="仅报告将合并的节点，不实际执行",
     )
+
+    server = subparsers.add_parser("server")
+    server.add_argument(
+        "--host",
+        type=str,
+        default=None,
+        help="绑定地址，默认读取 config.server_host",
+    )
+    server.add_argument(
+        "--port",
+        type=int,
+        default=None,
+        help="监听端口，默认读取 config.server_port",
+    )
+
     return parser
 
 
@@ -246,6 +262,16 @@ def main() -> None:
 
             result = cmd_stats(neo4j_client)
             _json_print(result)
+            return
+        if args.command == "server":
+            import uvicorn
+
+            host = args.host or config.server_host
+            port = args.port or config.server_port
+            _logger.info("启动 FastAPI 服务器 http://%s:%d", host, port)
+            _logger.info("API 文档: http://%s:%d/docs", host, port)
+            app = create_app(config)
+            uvicorn.run(app, host=host, port=port, log_level=config.log_level.lower())
             return
     finally:
         neo4j_client.close()

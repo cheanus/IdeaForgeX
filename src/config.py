@@ -50,6 +50,9 @@ class Config(BaseSettings):
     compact_threshold: float = Field(default=0.95)
     short_abstract_threshold: int = Field(default=200)
     log_level: str = Field(default="INFO")
+    server_host: str = Field(default="0.0.0.0")
+    server_port: int = Field(default=2048)
+    server_cors_origins: list[str] = Field(default_factory=lambda: ["*"])
 
 
 def load_config(config_file: str | Path | None = None) -> Config:
