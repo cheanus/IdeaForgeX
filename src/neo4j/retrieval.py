@@ -77,6 +77,34 @@ def expand_refinement_chain(client: Neo4jClient, hit_id: str) -> list[dict[str, 
         ]
 
 
+def batch_expand_refinement_chain(
+    client: Neo4jClient, hit_ids: list[str]
+) -> dict[str, list[dict[str, Any]]]:
+    """批量展开精化链，返回 {hit_id: [chain_nodes]}。一次网络往返处理所有节点。"""
+    if not hit_ids:
+        return {}
+
+    query = """
+    UNWIND $hit_ids AS hit_id
+    MATCH (hit:Inspiration {id: hit_id})
+    CALL (hit) {
+        MATCH (hit)-[:INSP_REFINES*0..10]->(finer:Inspiration) RETURN finer, hit.id AS src_id
+        UNION
+        MATCH (coarser:Inspiration)-[:INSP_REFINES*0..10]->(hit) RETURN coarser AS finer, hit.id AS src_id
+    }
+    RETURN DISTINCT finer, labels(finer)[0] AS node_type, src_id
+    """
+    with client.session() as session:
+        result = session.run(query, hit_ids=hit_ids)
+        groups: dict[str, list[dict[str, Any]]] = {}
+        for record in result:
+            src_id = record["src_id"]
+            groups.setdefault(src_id, []).append(
+                dict(record["finer"]) | {"type": record.get("node_type", "")}
+            )
+        return groups
+
+
 def hop_expand(
     client: Neo4jClient, node_id: str, max_neighbors: int
 ) -> list[dict[str, Any]]:
@@ -111,17 +139,28 @@ def retrieve_with_traversal(
     )
     candidates: dict[str, dict[str, Any]] = {}
 
+    insp_hit_ids: list[str] = []
+    insp_hit_scores: dict[str, float] = {}
     for hit in vectors:
         node = hit.node
         node_id = node["id"]
         candidates[node_id] = {"node": node, "score": hit.score, "source": "vector"}
         if node.get("type") == "Inspiration" or "粒度" in node:
-            for finer in expand_refinement_chain(client, node_id):
-                candidates[finer["id"]] = {
-                    "node": finer,
-                    "score": hit.score,
-                    "source": "chain",
-                }
+            insp_hit_ids.append(node_id)
+            insp_hit_scores[node_id] = hit.score
+
+    if insp_hit_ids:
+        chains = batch_expand_refinement_chain(client, insp_hit_ids)
+        for hit_id, finer_nodes in chains.items():
+            score = insp_hit_scores[hit_id]
+            for finer in finer_nodes:
+                fid = finer["id"]
+                if fid not in candidates:
+                    candidates[fid] = {
+                        "node": finer,
+                        "score": score,
+                        "source": "chain",
+                    }
 
     frontier = list(candidates.values())
     for _depth in range(config.max_depth):
