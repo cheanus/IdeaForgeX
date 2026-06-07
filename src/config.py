@@ -52,6 +52,7 @@ class Config(BaseSettings):
     log_level: str = Field(default="INFO")
     server_host: str = Field(default="0.0.0.0")
     server_port: int = Field(default=2048)
+    server_root_path: str = Field(default="")
     server_cors_origins: list[str] = Field(default_factory=lambda: ["*"])
 
 

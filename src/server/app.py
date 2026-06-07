@@ -49,6 +49,7 @@ def create_app(config: Config) -> FastAPI:
         title="IdeaForgeX 知识图谱只读服务",
         version="0.1.0",
         lifespan=lifespan,
+        root_path=config.server_root_path,
         docs_url="/docs",
         redoc_url="/redoc",
     )
