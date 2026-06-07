@@ -28,9 +28,9 @@ Most paper-to-idea pipelines stop at summaries or require manual curation. IdeaF
 
 ### Zero Setup
 
-A read-only HTTP API is deployed at `https://ifx.caveallegory.cn/api/`. Give your AI agent this one-liner:
+We've built a demo service using ~5000 CCF-A class AI papers from the past 5 years, hosted at `https://ifx.caveallegory.cn/api/`. Give your AI agent this one-liner:
 
-> Install the ideaforgex-read (https://github.com/cheanus/IdeaForgeX/blob/main/skills/ideaforgex-read/SKILL.md) skill, set `API_ENDPOINT=https://ifx.caveallegory.cn/api/`, then help me explore novel research directions around **transformer attention mechanisms**.
+> Install the ideaforgex-read (https://github.com/cheanus/IdeaForgeX/blob/main/skills/ideaforgex-read/SKILL.md) skill, set `API_ENDPOINT=https://ifx.caveallegory.cn/api/` and timeout to at least 60s, then help me explore novel research directions around **transformer attention mechanisms**.
 
 Replace the topic with your own — the agent will query the knowledge graph and brainstorm ideas for you.
 

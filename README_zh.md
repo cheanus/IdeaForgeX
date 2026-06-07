@@ -28,11 +28,11 @@
 
 ### 零配置使用
 
-只读 HTTP 服务部署在 `https://ifx.caveallegory.cn/api/`。把这句话发给你的 AI agent：
+我们使用近 5 年的 CCF-A 类 AI 论文，共约 5000 篇，搭建了一个 demo服务，部署在 `https://ifx.caveallegory.cn/api/`。把下面这句话发给你的 AI agent：
 
-> 安装技能 ideaforgex-read (https://github.com/cheanus/IdeaForgeX/blob/main/skills/ideaforgex-read/SKILL.md)，设置 `API_ENDPOINT=https://ifx.caveallegory.cn/api/`，然后帮我调研 **transformer 注意力机制**的创新方向。
+> 安装技能 ideaforgex-read (https://github.com/cheanus/IdeaForgeX/blob/main/skills/ideaforgex-read/SKILL.md)，设置 `API_ENDPOINT=https://ifx.caveallegory.cn/api/`，timeout设为至少60s。然后帮我调研 **transformer 注意力机制**的创新方向。
 
-把研究课题换成你自己的，agent 会自动查询知识图谱并为你脑暴创新点。
+把研究课题换成你自己的，agent 会自动查询知识图谱并为你头脑风暴创新点。
 
 ### 环境要求
 
