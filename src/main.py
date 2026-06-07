@@ -130,7 +130,8 @@ def main() -> None:
     config = load_config()
     logging.basicConfig(
         level=getattr(logging, config.log_level, logging.WARNING),
-        format="%(levelname)-7s  %(message)s",
+        format="%(asctime)s  %(levelname)-7s  %(message)s",
+        datefmt="%H:%M:%S",
     )
 
     neo4j_client = create_client(config)
