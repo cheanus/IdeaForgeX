@@ -21,12 +21,12 @@
 
 ```bash
 # 初始化图谱
-uv run python main.py bootstrap
+uv run ifx bootstrap
 
 # 训练论文（支持 arXiv ID、标题）
-uv run python main.py train 1706.03762
-uv run python main.py train "Attention Is All You Need"
-uv run python main.py train ViT
+uv run ifx train 1706.03762
+uv run ifx train "Attention Is All You Need"
+uv run ifx train ViT
 ```
 
 `bootstrap` 是幂等的——已经初始化过再跑也不会有副作用。
@@ -35,10 +35,10 @@ uv run python main.py train ViT
 
 ```bash
 # 用自然语言搜索相关灵感和问题
-uv run python main.py retrieve "使用扩散模型做医学图像分割的少样本学习"
+uv run ifx retrieve "使用扩散模型做医学图像分割的少样本学习"
 
 # 调整参数
-uv run python main.py retrieve "few-shot learning" --top-k 5 --final-limit 10
+uv run ifx retrieve "few-shot learning" --top-k 5 --final-limit 10
 ```
 
 输出精简视图（id、类型、得分、来源、核心描述）。agent 据此判断哪些节点值得深入。
@@ -47,22 +47,22 @@ uv run python main.py retrieve "few-shot learning" --top-k 5 --final-limit 10
 
 ```bash
 # 查看单个节点的全字段 + 精化链 + 关联边
-uv run python main.py inspect insp-abc123
+uv run ifx inspect insp-abc123
 
 # 同时查看多个节点
-uv run python main.py inspect insp-abc123,q-xyz789
+uv run ifx inspect insp-abc123,q-xyz789
 ```
 
-输出完整属性（前提条件、操作步骤、已知实例等）、精化链（更粗↔更细）、所有关联边及其目标节点信息。
+输出完整属性（前提条件、操作步骤等）、精化链（更粗↔更细）、所有关联边及其目标节点信息。
 
 ## 随机探索
 
 ```bash
 # 全图均匀随机
-uv run python main.py random --count 5
+uv run ifx random --count 5
 
 # 主题加权随机（在相关范围内随机抽样）
-uv run python main.py random --query "跨模态注意力" --count 3
+uv run ifx random --query "跨模态注意力" --count 3
 ```
 
 目的是为头脑风暴引入意外发现，打破纯检索排序的路径依赖。
@@ -70,10 +70,10 @@ uv run python main.py random --query "跨模态注意力" --count 3
 ## 路径查询
 
 ```bash
-uv run python main.py relate insp-abc123 insp-xyz789
+uv run ifx relate insp-abc123 insp-xyz789
 
 # 限制路径长度
-uv run python main.py relate insp-abc123 insp-xyz789 --max-len 4
+uv run ifx relate insp-abc123 insp-xyz789 --max-len 4
 ```
 
 查找两个节点之间的最短路径，返回中间节点序列和边序列。
@@ -82,13 +82,13 @@ uv run python main.py relate insp-abc123 insp-xyz789 --max-len 4
 
 ```bash
 # 命令行直接列多篇
-uv run python main.py batch-train 1706.03762 2010.11929 2103.00020 2103.14030
+uv run ifx batch-train 1706.03762 2010.11929 2103.00020 2103.14030
 
 # 从文件读取（每行一个论文标识）
-uv run python main.py batch-train --queries queries.txt
+uv run ifx batch-train --queries queries.txt
 
 # 从 JSONL 文件读取（跳过 API 解析，直接使用预加载内容）
-uv run python main.py batch-train --jsonl papers.jsonl
+uv run ifx batch-train --jsonl papers.jsonl
 # JSONL 格式：每行一个 JSON 对象，支持以下字段：
 #   必填: "id"（唯一标识，任意字符串，支持 prefix:body 格式如 arxiv:xxxx
 #         或 openalex:Wxxxx；也可直接用自定义 ID 如 my-paper-001），
@@ -100,8 +100,8 @@ uv run python main.py batch-train --jsonl papers.jsonl
 # OpenAlex dump 转 JSONL 见：scripts/openalex_to_jsonl.py
 
 # 混用
-uv run python main.py batch-train 1706.03762 --queries queries.txt
-uv run python main.py batch-train --queries queries.txt --jsonl papers.jsonl
+uv run ifx batch-train 1706.03762 --queries queries.txt
+uv run ifx batch-train --queries queries.txt --jsonl papers.jsonl
 ```
 
 并行训练用多线程同时训练多篇论文，瓶颈在 LLM API 调用（I/O）。每 `compact_interval` 篇新训练完成后自动触发一次图压缩，全部完成后执行最终压缩。
@@ -134,10 +134,10 @@ uv run python main.py batch-train --queries queries.txt --jsonl papers.jsonl
 
 ```bash
 # 执行全图压缩，合并语义相近的重复节点
-uv run python main.py compact
+uv run ifx compact
 
 # 仅报告将合并的节点，不实际执行
-uv run python main.py compact --dry-run
+uv run ifx compact --dry-run
 ```
 
 并行训练可能产生语义相近的重复节点（并发窗口内互不可见），`compact` 负责事后合并。合并保持细化链树结构（仅同粒度且上游一致的节点才合并）。
@@ -156,8 +156,8 @@ uv run python main.py compact --dry-run
 
 ```bash
 # 对论文、灵感、问题统一接口
-uv run python main.py delete-node insp-abc123
-uv run python main.py delete-node paper-1706.03762
+uv run ifx delete-node insp-abc123
+uv run ifx delete-node paper-1706.03762
 ```
 
 级联规则：删除 Paper 时自动清理仅依赖它的实践节点；删除实践节点时自动清理仅依赖它的 Paper。
@@ -165,7 +165,7 @@ uv run python main.py delete-node paper-1706.03762
 ## 重置
 
 ```bash
-uv run python main.py reset
+uv run ifx reset
 ```
 
 删除所有灵感和问题节点及关联边，同时清空论文去重库。**不可逆。**
@@ -174,10 +174,10 @@ uv run python main.py reset
 
 ```bash
 # 开发调试
-LOG_LEVEL=DEBUG uv run python main.py train 1706.03762
+LOG_LEVEL=DEBUG uv run ifx train 1706.03762
 
 # 仅关键信息
-LOG_LEVEL=INFO uv run python main.py bootstrap
+LOG_LEVEL=INFO uv run ifx bootstrap
 ```
 
 不设 `LOG_LEVEL` 时默认静默（`WARNING`），`print()` 输出结果到 stdout，状态消息通过 logger 输出到 stderr。

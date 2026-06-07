@@ -177,7 +177,7 @@ merge_node_group(client, survivor_id, victim_ids):
         
         # 2. 合并可变属性
         # 核心描述：保留更长的
-        # 前提条件/操作步骤/已知实例/当前现状/未解决部分：concat 去重
+        # 前提条件/操作步骤/当前现状/未解决部分：concat 去重
         SET survivor.property = coalesce_richer(survivor.property, v.property)
         
         # 3. 删除冗余节点

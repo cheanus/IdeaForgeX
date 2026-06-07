@@ -43,7 +43,6 @@ Neo4j 异构图，存储 Inspiration、Question 和 Paper 三种节点及五种�
 | 向量 | embedding 输出，驱动向量检索 |
 | 前提条件 | 适用场景 |
 | 操作步骤 | 转化为创新的步骤 |
-| 已知实例 | 体现该模式的论文，可缺省 |
 
 ### 4.2 Question（研究问题）
 

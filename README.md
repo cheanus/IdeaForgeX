@@ -67,22 +67,22 @@ cp config.example.yaml config.yaml
 
 ```bash
 # 4. Bootstrap the graph schema (idempotent)
-uv run python main.py bootstrap
+uv run ifx bootstrap
 ```
 
 ### Usage
 
 ```bash
 # Train a paper into the knowledge graph
-uv run python main.py train 1706.03762          # arXiv ID
-uv run python main.py train "Attention Is All You Need"  # title search
+uv run ifx train 1706.03762          # arXiv ID
+uv run ifx train "Attention Is All You Need"  # title search
 
 # Query the graph (external agents call these commands)
-uv run python main.py retrieve "few-shot learning with diffusion models"
-uv run python main.py inspect INSP_4
-uv run python main.py random --count 5
-uv run python main.py random --query "cross-modal attention" --count 3
-uv run python main.py relate INSP_1 INSP_10
+uv run ifx retrieve "few-shot learning with diffusion models"
+uv run ifx inspect INSP_4
+uv run ifx random --count 5
+uv run ifx random --query "cross-modal attention" --count 3
+uv run ifx relate INSP_1 INSP_10
 ```
 
 For CLI usage guide, see [`docs/use_cli.md`](docs/use_cli.md). For full JSON schemas, see [`docs/superpowers/specs/2025-05-30-cli-spec.md`](docs/superpowers/specs/2025-05-30-cli-spec.md).

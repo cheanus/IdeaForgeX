@@ -67,22 +67,22 @@ cp config.example.yaml config.yaml
 
 ```bash
 # 4. 初始化图谱 schema（幂等）
-uv run python main.py bootstrap
+uv run ifx bootstrap
 ```
 
 ### 使用
 
 ```bash
 # 将论文训练进知识图谱
-uv run python main.py train 1706.03762          # arXiv ID
-uv run python main.py train "Attention Is All You Need"  # 标题搜索
+uv run ifx train 1706.03762          # arXiv ID
+uv run ifx train "Attention Is All You Need"  # 标题搜索
 
 # 查询知识图谱（外部 agent 调用这些命令）
-uv run python main.py retrieve "使用扩散模型做少样本学习"
-uv run python main.py inspect INSP_4
-uv run python main.py random --count 5
-uv run python main.py random --query "跨模态注意力" --count 3
-uv run python main.py relate INSP_1 INSP_10
+uv run ifx retrieve "使用扩散模型做少样本学习"
+uv run ifx inspect INSP_4
+uv run ifx random --count 5
+uv run ifx random --query "跨模态注意力" --count 3
+uv run ifx relate INSP_1 INSP_10
 ```
 
 CLI 使用指南见 [`docs/use_cli.md`](docs/use_cli.md)。完整 JSON schema 见 [`docs/superpowers/specs/2025-05-30-cli-spec.md`](docs/superpowers/specs/2025-05-30-cli-spec.md)。

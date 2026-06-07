@@ -27,7 +27,7 @@ cp config.example.yaml config.yaml
 
 ```bash
 # 4. 初始化图谱 schema（幂等）
-uv run python main.py bootstrap
+uv run ifx bootstrap
 ```
 
 完整 CLI 使用指南见 [`docs/use_cli.md`](use_cli.md)。
@@ -80,10 +80,10 @@ uv run pytest -v
 
 ```bash
 # 开发调试
-LOG_LEVEL=DEBUG uv run python main.py train 1706.03762
+LOG_LEVEL=DEBUG uv run ifx train 1706.03762
 
 # 仅关键信息
-LOG_LEVEL=INFO uv run python main.py bootstrap
+LOG_LEVEL=INFO uv run ifx bootstrap
 ```
 
 不设 `LOG_LEVEL` 时默认 `WARNING`，`print()` 输出结果到 stdout，状态消息通过 logger 输出到 stderr。
